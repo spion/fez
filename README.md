@@ -5,6 +5,10 @@ Fez
 
 Woot!
 
+    *.less -> %f.css
+    *.css -> %f.min.css
+    *.min.css -> dist.min.css
+
 ![](https://dl.dropboxusercontent.com/u/10832827/before.svg)
 
 ![](https://dl.dropboxusercontent.com/u/10832827/after.svg)
