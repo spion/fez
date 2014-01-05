@@ -39,25 +39,26 @@ function fez(module) {
     var matches = [];
     outs.forEach(function(out) {
       if(minimatch(out, pattern))
-	matches.push(out);
+        matches.push(out);
     });
     return matches;
-  };
+  }
 
   rules.forEach(function(rule) {
     rule.files = {};
     rule.inputs.forEach(function(input) {
       var files = glob.sync(input);
       files.forEach(function(file) {
-	if(rule.each) {
-	  var out = rule.outputs[0](file);
-	} else {
-	  out = rule.outputs[0];
-	}
+        var out;
+        if(rule.each) {
+          out = rule.outputs[0](file);
+        } else {
+          out = rule.outputs[0];
+        }
 
-	outs.push(out);
+        outs.push(out);
 
-	rule.files[file] = out;
+        rule.files[file] = out;
       });
     });
   });
@@ -68,22 +69,22 @@ function fez(module) {
     changed = false;
     rules.forEach(function(rule) {
       rule.inputs.forEach(function(input) {
-	var files = oglob(input);
-	files.forEach(function(file) {
-	  if(!rule.files[file]) {
-	    changed = true;
+        var files = oglob(input);
+        files.forEach(function(file) {
+          if(!rule.files[file]) {
+            changed = true;
 
-	    if(rule.each) {
-	      var out = rule.outputs[0](file);
-	    } else {
-	      out = rule.outputs[0];
-	    }
+            var out;
+            if(rule.each)
+              out = rule.outputs[0](file);
+            else
+              out = rule.outputs[0];
 
-	    outs.push(out);
+            outs.push(out);
 
-	    rule.files[file] = out;
-	  }
-	});
+            rule.files[file] = out;
+          }
+        });
       });
     });
   }
@@ -95,23 +96,25 @@ function fez(module) {
       var output = rule.files[input];
       if(inEdges[output]) inEdges[output]++;
       else inEdges[output] = 1;
+
+      var node;
       if(!nodes[output]) {
-	var node = nodes[output] = [];
-	node.inComplete = 0;
-	node.file = output;
-	node.inFiles = [input];
-	node.rule = rule;
+        node = nodes[output] = [];
+        node.inComplete = 0;
+        node.file = output;
+        node.inFiles = [input];
+        node.rule = rule;
       } else {
-	nodes[output].inFiles.push(input);
-	nodes[output].rule = rule;
+        nodes[output].inFiles.push(input);
+        nodes[output].rule = rule;
       }
 
       if(!inEdges[input]) inEdges[input] = 0;
       if(!nodes[input]) {
-	node = nodes[input] = [];
-	node.inComplete = 0;
-	node.file = input;
-	node.inFiles = [];
+        node = nodes[input] = [];
+        node.inComplete = 0;
+        node.file = input;
+        node.inFiles = [];
       }
 
       nodes[input].push(output);
@@ -123,7 +126,7 @@ function fez(module) {
   var working = [];
   for(var file in inEdges) {
     var rank = inEdges[file];
-    if(rank == 0) working.push(file);
+    if(rank === 0) working.push(file);
   }
 
   digest(working);
@@ -137,17 +140,17 @@ function fez(module) {
     working.forEach(function(file) {
       var node = nodes[file];
       if(node.inComplete == inEdges[file]) {
-	if(node.inFiles.length > 0) {
-	  ps.push(build(node));
-	}
+        if(node.inFiles.length > 0) {
+          ps.push(build(node));
+        }
 
-	node.forEach(function(out) {
-	  nodes[out].inComplete++;
-	  if(newWorking.indexOf(out) == -1)
-	    newWorking.push(out); 
-	});
+        node.forEach(function(out) {
+          nodes[out].inComplete++;
+          if(newWorking.indexOf(out) == -1)
+            newWorking.push(out); 
+        });
       } else {
-	newWorking.push(file);
+        newWorking.push(file);
       }
     });
 
@@ -161,30 +164,30 @@ function fez(module) {
       console.log(node.inFiles.join(" "), "->", node.file);
       var inputs = [];
       node.inFiles.forEach(function(file) {
-	inputs.push(new Input(file));
+        inputs.push(new Input(file));
       });
 
       var out = node.rule.op(inputs);
       if(isPromise(out)) {
-	return out.then(function(buffer) {
-	  if(buffer != null) { //(ibw) assume it's a Buffer (for now)
-	    var ps = [];
-	    ps.push(writep(node.file, buffer));
+        return out.then(function(buffer) {
+          if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+            var ps = [];
+            ps.push(writep(node.file, buffer));
 
-	    return Promise.all(ps);
-	  }
-	});
+            return Promise.all(ps);
+          }
+        });
       } else if(out instanceof Writable) {
-	return new Promise(function(resolve, reject) {
-	  out.pipe(fs.createWriteStream(node.file));
-	  out.on("end", function() {
-	    resolve();
-	  });
-	});
+        return new Promise(function(resolve, reject) {
+          out.pipe(fs.createWriteStream(node.file));
+          out.on("end", function() {
+            resolve();
+          });
+        });
       }
     }
   }
-};
+}
 
 fez.mapFile = function(pattern) {
   return function(input) {
@@ -192,17 +195,17 @@ fez.mapFile = function(pattern) {
       var basename = path.basename(input);
       var hidden = false;
       if(basename.charAt(0) == ".") {
-	hidden = true;
-	basename = basename.slice(1);
+        hidden = true;
+        basename = basename.slice(1);
       }
 
       var split = basename.split(".");
       if(split.length > 1) {
-	if(hidden) return "." + split.slice(0, -1).join(".");
-	else return split.slice(0, -1).join(".");
+        if(hidden) return "." + split.slice(0, -1).join(".");
+        else return split.slice(0, -1).join(".");
       } else {
-	if(hidden) return "." + basename;
-	else return basename;
+        if(hidden) return "." + basename;
+        else return basename;
       }
     })();
 
@@ -242,12 +245,12 @@ function writep(file, data) {
     mkdirp(path.dirname(file), function(err) {
       if(err) reject(err);
       fs.writeFile(file, data, function(err) {
-	if(err) reject(err);
-	else resolve();
+        if(err) reject(err);
+        else resolve();
       });
     });
   });
-};
+}
 
 function needsUpdate(inputs, outputs) {
   var oldestOutput = Number.MAX_VALUE;
@@ -257,13 +260,13 @@ function needsUpdate(inputs, outputs) {
       oldestOutput = 0;
     } else {
       try {
-	var stat = fs.statSync(out),
-	    time = stat.mtime.getTime();
+        var stat = fs.statSync(out),
+            time = stat.mtime.getTime();
 
-	if(time < oldestOutput)
-	  oldestOutput = time;
+        if(time < oldestOutput)
+          oldestOutput = time;
       } catch (e) {
-	oldestOutput = 0;
+        oldestOutput = 0;
       }
     }
   });
@@ -272,10 +275,10 @@ function needsUpdate(inputs, outputs) {
   inputs.forEach(function(input) {
     try {
       var stat = fs.statSync(input),
-	  time = stat.mtime.getTime();
+          time = stat.mtime.getTime();
 
       if(time > newestInput)
-	newestInput = time;
+        newestInput = time;
     } catch(e) {
       newestInput = 0;
     }
@@ -292,6 +295,6 @@ function union(a, b) {
   });
 
   return a2;
-};
+}
 
 module.exports = fez;
