@@ -32,7 +32,7 @@ Fez build specs are simple Javascript files, usually called `fez.js` in a projec
       ...    		  
     };
 
-    exports.default = build;
+    exports.default = exports.build;
 
     fez(module);
 

@@ -7,27 +7,28 @@ var nopt = require("nopt"),
     isPromise = require("is-promise"),
     fs = require("fs"),
     mkdirp = require("mkdirp"),
-    assert = require("assert");
+    assert = require("assert"),
+    Writable = require("stream").Writable;
 
 function fez(module) {
   var rules = [];
 
   function defineRule(inputs, outputs, operation) {
     toArray(outputs).forEach(function(output) {
-      rules.push({inputs: toArray(inputs), outputs: [output], op: operation});
+      rules.push({ inputs: toArray(inputs), outputs: [output], op: operation });
     });
   }
 
   //Repeat the rule for each input
   defineRule.each = function(inputs, outputs, operation) {
     toArray(inputs).forEach(function(input) {
-      rules.push({inputs: [input], outputs: toArray(outputs), op: operation, each: true});
+      rules.push({ inputs: [input], outputs: toArray(outputs), op: operation, each: true });
     });
   };
 
   //Pass complete input and output arrays to operation
-  defineRule.multi = function(inputs, outputs, operation) {
-    rules.push({inputs: toArray(inputs), outputs: toArray(outputs), op: operation, multi: true });
+  defineRule.many = function(inputs, outputs, operation) {
+    rules.push({ inputs: toArray(inputs), outputs: toArray(outputs), op: operation, many: true });
   };
 
   module.exports.default(defineRule);
@@ -172,6 +173,13 @@ function fez(module) {
 
 	    return Promise.all(ps);
 	  }
+	});
+      } else if(out instanceof Writable) {
+	return new Promise(function(resolve, reject) {
+	  out.pipe(fs.createWriteStream(node.file));
+	  out.on("end", function() {
+	    resolve();
+	  });
 	});
       }
     }
