@@ -3,14 +3,21 @@ var nopt = require("nopt"),
     glob = require("glob"),
     path = require("path"),
     minimatch = require("minimatch"),
-    Promise = require("bluebird"),
+    Promise = require("bluebirdg"),
     isPromise = require("is-promise"),
     fs = require("fs"),
     mkdirp = require("mkdirp"),
     assert = require("assert"),
-    Writable = require("stream").Writable;
+    Writable = require("stream").Writable,
+    exec = require("child_process").exec;
 
 function fez(module) {
+  var options = nopt({
+    "verbose": Boolean
+  }, {
+    "v": "--verbose"
+  });
+
   var rules = [];
 
   function defineRule(inputs, outputs, operation) {
@@ -127,11 +134,11 @@ function fez(module) {
     if(rank === 0) working.push(file);
   }
 
-  digest(working);
+  var createdCount = 0;
 
+  digest(working);
   function digest(working) {
-    //console.log(working);
-    if(!working.length) return;
+    if(!working.length) return done();
 
     var newWorking = [];
     var ps = [];
@@ -157,15 +164,27 @@ function fez(module) {
     });
   }
 
+  function done() {
+    if(createdCount === 0)
+      console.log("Nothing to be done.");
+    else if(createdCount === 1)
+      console.log("Created 1 file.");
+    else console.log("Created " + createdCount + " files.");
+  }
+
   function build(node) {
     if(needsUpdate(node.inFiles, [node.file])) {
-      console.log(node.inFiles.join(" "), "->", node.file);
+      createdCount++;
+
+      if(options.verbose)
+        console.log(node.inFiles.join(" "), "->", node.file);
+
       var inputs = [];
       node.inFiles.forEach(function(file) {
         inputs.push(new Input(file));
       });
 
-      var out = node.rule.op(inputs);
+      var out = node.rule.op(inputs, [node.file]);
       if(isPromise(out)) {
         return out.then(function(buffer) {
           if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
@@ -186,6 +205,23 @@ function fez(module) {
     }
   }
 }
+
+fez.exec = function(command) {
+  return function(inputs, outputs) {
+    var ifiles = inputs.map(function(i) { return i.getFilename(); }).join(" "),
+        ofiles = outputs.join(" "),
+        pcommand = command.
+          replace("%i", ifiles).
+          replace("%o", ofiles);
+
+    return new Promise(function(resolve, reject) {
+      exec(pcommand, function(err) {
+        if(err) reject(err);
+        else resolve();
+      });
+    });
+  };
+};
 
 fez.mapFile = function(pattern) {
   return function(input) {
