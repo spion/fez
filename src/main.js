@@ -75,10 +75,8 @@ function fez(module) {
             changed = true;
 
             var out;
-            if(rule.each)
-              out = rule.outputs[0](file);
-            else
-              out = rule.outputs[0];
+            if(rule.each) out = rule.outputs[0](file);
+            else out = rule.outputs[0];
 
             outs.push(out);
 
