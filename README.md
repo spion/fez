@@ -3,7 +3,7 @@ Fez
 
 ![](fez.png)
 
-Woot!
+![](https://dl.dropboxusercontent.com/u/10832827/out.gif)
 
 Let's say we have the following ruleset:
 
