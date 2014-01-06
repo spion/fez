@@ -3,7 +3,7 @@ var nopt = require("nopt"),
     glob = require("glob"),
     path = require("path"),
     minimatch = require("minimatch"),
-    Promise = require("bluebirdg"),
+    Promise = require("bluebird"),
     isPromise = require("is-promise"),
     fs = require("fs"),
     mkdirp = require("mkdirp"),
@@ -20,25 +20,33 @@ function fez(module) {
 
   var rules = [];
 
+  //One to one or many to one relationships. Repeats the operation for each
+  //output if there are multiple, passing the complete input array each time.
   function defineRule(inputs, outputs, operation) {
     toArray(outputs).forEach(function(output) {
       rules.push({ inputs: toArray(inputs), outputs: [output], op: operation });
     });
   }
 
-  //Repeat the rule for each input
+  //One to one relationships where you want to pass in multiple inputs (i.e from
+  //a glob, array, or generator). Repeats the operation for each input with the
+  //output.
   defineRule.each = function(inputs, outputs, operation) {
     toArray(inputs).forEach(function(input) {
       rules.push({ inputs: [input], outputs: toArray(outputs), op: operation, each: true });
     });
   };
 
-  //Pass complete input and output arrays to operation
+  //Pass complete input and output arrays to operation Useful for many-many
+  //operations, which should really be limited to shell commands. Native fez
+  //operations should try very hard to be one-one or many-one operations with a
+  //single output.
   defineRule.many = function(inputs, outputs, operation) {
     rules.push({ inputs: toArray(inputs), outputs: toArray(outputs), op: operation, many: true });
   };
 
-  module.exports.default(defineRule);
+  var ruleset = options.argv.remain.length ? options.argv.remain[0] : 'default';
+  module.exports[ruleset](defineRule);
 
   var outs = [];
 
