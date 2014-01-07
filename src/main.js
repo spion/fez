@@ -23,9 +23,11 @@ var nopt = require("nopt"),
 
 function fez(module) {
   var options = nopt({
-    "verbose": Boolean
+    "verbose": Boolean,
+    "quiet": Boolean
   }, {
-    "v": "--verbose"
+    "v": "--verbose",
+    "q": "--quet"
   });
 
   var rules = [];
@@ -231,8 +233,8 @@ function fez(module) {
 
   var working = [];
 
-  //Calculate the set of nodes with zero inputs, use them to bootstrap the build
-  //process
+  //Calculate the set of nodes with zero inputs (source nodes), use them to
+  //bootstrap the build process.
   for(var filename in nodes) {
     var node = nodes[filename];
     if(node.inEdges === 0) working.push(filename);
@@ -284,9 +286,11 @@ function fez(module) {
       });
 
       if(anyRejected) {
-        cursor.red();
-        console.log("An operation has failed. Aborting.");
-        cursor.reset();
+        if(!options.quiet) {
+          cursor.red();
+          console.log("An operation has failed. Aborting.");
+          cursor.reset();
+        }
       } else {
         digest(newWorking);
       }
@@ -294,7 +298,7 @@ function fez(module) {
   }
 
   function done() {
-    if(createdCount === 0 && taskCount === 0) {
+    if(createdCount === 0 && taskCount === 0 && !options.quiet) {
       cursor.green();
       console.log("Nothing to be done.");
       cursor.reset();
