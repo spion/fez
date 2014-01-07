@@ -74,7 +74,6 @@ function fez(module) {
   }
 
   var tasks = [];
-
   function Task(rule) {
     this.rule = rule;
     this.inEdges = 0;
@@ -82,48 +81,90 @@ function fez(module) {
     this.inFiles = [];
     tasks.push(this);
   }
-
+  
+  //Iterate over each rule. If the rule is not an 'each' rule, create a new Task
+  //object for the entire rule. Iterate over each input, find all the files that
+  //match the input glob. If the rule is an 'each' rule, output should be a
+  //function -- create an output node for each input file, named as a function
+  //of the input file (should also make it possible to have an equal-length
+  //array of output names). 
+  //
+  //   a -> f(a) = a'
+  //   b -> f(b) = b'
+  //   c -> f(c) = c'
+  //
+  //Otherwise, there will be a single shared output node for every input file in
+  //the rule.
+  //
+  //   a
+  //    \
+  //   b - abc'
+  //    /
+  //   c
+  //
+  //Right now it's impossible that there would be more than one meaningful
+  //output, until I put some more thought into 
   rules.forEach(function(rule) {
     var task;
+
+    //Create a new Task instance for every input file in the rule
     if(rule.task && !rule.each) {
       task = new Task(rule);
     }
-
+    
+    //List of inputs->outputs associated with this rule.
     rule.files = {};
+
     rule.inputs.forEach(function(input) {
       var files = glob.sync(input);
       files.forEach(function(file) {
         if(rule.task && rule.each) {
+          //This file is an input to a task and since the rule is an 'each'
+          //rule, create a new Task. This means a single Task will have a single
+          //input.
           task = new Task();
           task.rule = rule;
           rule.files[file] = task;
         } else if(rule.task) {
+          //File is an input to a task. Since the rule *isn't* an 'each' rule,
+          //use the shared task for the rule. This means a single task will have
+          //multiple inputs.
           rule.files[file] = task;
         } else {
-          var out;
-          if(rule.each) {
-            out = rule.outputs[0](file);
-          } else {
-            out = rule.outputs[0];
-          }
+          //File is an input that is transformed into an output file.
 
+          //If it's an 'each' rule, generate the output filename as a function
+          //of the input, otherwise use a static output filename.
+          var out;
+          if(rule.each) out = rule.outputs[0](file); 
+          else out = rule.outputs[0];
+
+          //Add the output to the outs list for future calls to oglob
           outs.push(out);
 
+          //Add the input->output relation to the rule's file list
           rule.files[file] = out;
         }
       });
     });
   });
 
-  //(ibw) need to figure out some form of cycle detection
-  var changed = true;
-  while(changed) {
-    changed = false;
+  //Repeat the above iteration, this time using generated output files as inputs
+  //to the oglob function so that outputs become inputs of other operations,
+  //successively creating edge relationships to form a build graph. Keep
+  //repeating the iteration until there are no more changes to the edge list.
+  do {
+    var changed = false;
     rules.forEach(function(rule) {
       rule.inputs.forEach(function(input) {
+        //Find all the generated output filenames which match this input glob
         var files = oglob(input);
+
+        //Iterate over them
         files.forEach(function(file) {
+          //If the output isn't in the rule's output file list already, keep going
           if(!rule.files[file]) {
+            //We're changing the edge list; trigger another iteration of the loop
             changed = true;
 
             var out;
@@ -131,22 +172,22 @@ function fez(module) {
             else out = rule.outputs[0];
 
             outs.push(out);
-
             rule.files[file] = out;
           }
         });
       });
     });
-  }
+  } while(changed);
 
-  var inEdges = {};
+  //Our build graph, turned into node-> form from the edge list we have
+  //currently
   var nodes = {};
   rules.forEach(function(rule) {
     for(var input in rule.files) {
-      if(!inEdges[input]) inEdges[input] = 0;
       if(!nodes[input]) {
         node = nodes[input] = [];
         node.inComplete = 0;
+        node.inEdges = 0;
         node.file = input;
         node.inFiles = [];
       }
@@ -156,13 +197,11 @@ function fez(module) {
         output.inEdges++;
         output.inFiles.push(input);
       } else {
-        if(inEdges[output]) inEdges[output]++;
-        else inEdges[output] = 1;
-
         var node;
         if(!nodes[output]) {
           node = nodes[output] = [];
           node.inComplete = 0;
+          node.inEdges = 0;
           node.file = output;
           node.inFiles = [input];
           node.rule = rule;
@@ -170,6 +209,8 @@ function fez(module) {
           nodes[output].inFiles.push(input);
           nodes[output].rule = rule;
         }
+
+        nodes[output].inEdges++;
       }
 
       nodes[input].push(output);
@@ -179,9 +220,12 @@ function fez(module) {
   });
 
   var working = [];
-  for(var file in inEdges) {
-    var rank = inEdges[file];
-    if(rank === 0) working.push(file);
+
+  //Calculate the set of nodes with zero inputs, use them to bootstrap the build
+  //process
+  for(var filename in nodes) {
+    var node = nodes[filename];
+    if(node.inEdges === 0) working.push(filename);
   }
 
   var createdCount = 0,
@@ -201,7 +245,7 @@ function fez(module) {
         }
       } else {
         var node = nodes[file];
-        if(node.inComplete == inEdges[file]) {
+        if(node.inComplete == node.inEdges) {
           if(node.inFiles.length > 0) {
             ps.push(build(node));
           }
