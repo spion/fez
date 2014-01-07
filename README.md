@@ -40,7 +40,7 @@ Let's step through this line by line.
 
     var fez = require("fez");
 
-Requiring `fez` isn't strictly required, but is necessary in making `fez.js` self-executable. The only case in which you might not want it is if you have child build specs which are never run on their own. Even then, `fez` comes with quite a bit of utility functionality for crafting useful rulesets.
+Requiring `fez` isn't strictly necessary, but is necessary in making `fez.js` self-executable. The only case in which you might not want it is if you have child build specs which are never run on their own. Even then, `fez` comes with quite a bit of utility functionality for crafting useful rulesets.
 
     exports.build = function(rule) {
 
