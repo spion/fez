@@ -11,6 +11,14 @@ var nopt = require("nopt"),
     Writable = require("stream").Writable,
     exec = require("child_process").exec;
 
+/****************
+ *     --o--    *
+ *    |   ) |   *
+ *    |    )|   *
+ *    +----)+   *
+ *      Fez     *
+ ****************/
+
 function fez(module) {
   var options = nopt({
     "verbose": Boolean
