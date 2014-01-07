@@ -1,4 +1,6 @@
 var nopt = require("nopt"),
+    ansi = require("ansi"),
+    cursor = ansi(process.stdout),
     through = require("through"),
     glob = require("glob"),
     path = require("path"),
@@ -281,24 +283,21 @@ function fez(module) {
           anyRejected = true;
       });
 
-      if(anyRejected) console.log("An operation has failed. Aborting.");
-      else digest(newWorking);
+      if(anyRejected) {
+        cursor.red();
+        console.log("An operation has failed. Aborting.");
+        cursor.reset();
+      } else {
+        digest(newWorking);
+      }
     });
   }
 
   function done() {
     if(createdCount === 0 && taskCount === 0) {
+      cursor.green();
       console.log("Nothing to be done.");
-    } else {
-      if(createdCount === 1)
-        console.log("Created 1 file.");
-      else if(createdCount > 0)
-        console.log("Created " + createdCount + " files.");
-
-      if(taskCount === 1)
-        console.log("Completed 1 task.");
-      else if(taskCount > 1)
-        console.log("Completed " + taskCount + " tasks.");
+      cursor.reset();
     }
   }
 
@@ -307,38 +306,46 @@ function fez(module) {
       //(ibw) Just do it ✓
       taskCount++;
       return node.rule.op(buildInputs(), [node.file]);
-    } else if(needsUpdate(node.inFiles, [node.file])) {
-      createdCount++;
-
-      if(options.verbose)
+    } else {
+      if(options.verbose) {
         console.log(node.inFiles.join(" "), "->", node.file);
-
-      var out = node.rule.op(buildInputs(), [node.file]);
-      if(isPromise(out)) {
-        return out.then(function(buffer) {
-          if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-            var ps = [];
-            ps.push(writep(node.file, buffer));
-
-            return Promise.all(ps);
-          }
-        });
-      } else if(out instanceof Writable) {
-        return new Promise(function(resolve, reject) {
-          out.pipe(fs.createWriteStream(node.file));
-          out.on("end", function() {
-            resolve();
-          });
-        });
       }
-    }
 
-    function buildInputs() {
-      var inputs = [];
-      node.inFiles.forEach(function(file) {
-        inputs.push(new Input(file));
-      });
-      return inputs;
+      if(needsUpdate(node.inFiles, [node.file])) {
+        createdCount++;
+        
+        process.stdout.write("Creating ");
+        cursor.green();
+        process.stdout.write(node.file + "\n"); 
+        cursor.reset();
+
+        var out = node.rule.op(buildInputs(), [node.file]);
+        if(isPromise(out)) {
+          return out.then(function(buffer) {
+            if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+              var ps = [];
+              ps.push(writep(node.file, buffer));
+
+              return Promise.all(ps);
+            }
+          });
+        } else if(out instanceof Writable) {
+          return new Promise(function(resolve, reject) {
+            out.pipe(fs.createWriteStream(node.file));
+            out.on("end", function() {
+              resolve();
+            });
+          });
+        }
+      }
+
+      function buildInputs() {
+        var inputs = [];
+        node.inFiles.forEach(function(file) {
+          inputs.push(new Input(file));
+        });
+        return inputs;
+      }
     }
   }
 }
