@@ -44,11 +44,25 @@ function fez(module) {
   defineRule.many = function(inputs, outputs, operation) {
     rules.push({ inputs: toArray(inputs), outputs: toArray(outputs), op: operation, many: true });
   };
+  
+  //A task is a special rule which has no output. It will be run each time the
+  //ruleset is run, since there are no output files with which to compare
+  //timestamps.
+  defineRule.task = function(inputs, operation) {
+    rules.push({ inputs: toArray(inputs), op: operation, task: true });
+  };
+
+  defineRule.task.each = function(inputs, operation) {
+    toArray(inputs).forEach(function(input) {
+      rules.push({ inputs: [input], op: operation, task: true, each: true });
+    });
+  };
 
   var ruleset = options.argv.remain.length ? options.argv.remain[0] : 'default';
   module.exports[ruleset](defineRule);
 
-  var outs = [];
+  var outs = [],
+      nextTask = 0;
 
   function oglob(pattern) {
     var matches = [];
@@ -59,21 +73,44 @@ function fez(module) {
     return matches;
   }
 
+  var tasks = [];
+
+  function Task(rule) {
+    this.rule = rule;
+    this.inEdges = 0;
+    this.inComplete = 0;
+    this.inFiles = [];
+    tasks.push(this);
+  }
+
   rules.forEach(function(rule) {
+    var task;
+    if(rule.task && !rule.each) {
+      task = new Task(rule);
+    }
+
     rule.files = {};
     rule.inputs.forEach(function(input) {
       var files = glob.sync(input);
       files.forEach(function(file) {
-        var out;
-        if(rule.each) {
-          out = rule.outputs[0](file);
+        if(rule.task && rule.each) {
+          task = new Task();
+          task.rule = rule;
+          rule.files[file] = task;
+        } else if(rule.task) {
+          rule.files[file] = task;
         } else {
-          out = rule.outputs[0];
+          var out;
+          if(rule.each) {
+            out = rule.outputs[0](file);
+          } else {
+            out = rule.outputs[0];
+          }
+
+          outs.push(out);
+
+          rule.files[file] = out;
         }
-
-        outs.push(out);
-
-        rule.files[file] = out;
       });
     });
   });
@@ -106,22 +143,6 @@ function fez(module) {
   var nodes = {};
   rules.forEach(function(rule) {
     for(var input in rule.files) {
-      var output = rule.files[input];
-      if(inEdges[output]) inEdges[output]++;
-      else inEdges[output] = 1;
-
-      var node;
-      if(!nodes[output]) {
-        node = nodes[output] = [];
-        node.inComplete = 0;
-        node.file = output;
-        node.inFiles = [input];
-        node.rule = rule;
-      } else {
-        nodes[output].inFiles.push(input);
-        nodes[output].rule = rule;
-      }
-
       if(!inEdges[input]) inEdges[input] = 0;
       if(!nodes[input]) {
         node = nodes[input] = [];
@@ -130,19 +151,41 @@ function fez(module) {
         node.inFiles = [];
       }
 
+      var output = rule.files[input];
+      if(output instanceof Task) {
+        output.inEdges++;
+        output.inFiles.push(input);
+      } else {
+        if(inEdges[output]) inEdges[output]++;
+        else inEdges[output] = 1;
+
+        var node;
+        if(!nodes[output]) {
+          node = nodes[output] = [];
+          node.inComplete = 0;
+          node.file = output;
+          node.inFiles = [input];
+          node.rule = rule;
+        } else {
+          nodes[output].inFiles.push(input);
+          nodes[output].rule = rule;
+        }
+      }
+
       nodes[input].push(output);
     }
 
     delete rule.files;
   });
-  
+
   var working = [];
   for(var file in inEdges) {
     var rank = inEdges[file];
     if(rank === 0) working.push(file);
   }
 
-  var createdCount = 0;
+  var createdCount = 0,
+      taskCount = 0;
 
   digest(working);
   function digest(working) {
@@ -151,48 +194,74 @@ function fez(module) {
     var newWorking = [];
     var ps = [];
     working.forEach(function(file) {
-      var node = nodes[file];
-      if(node.inComplete == inEdges[file]) {
-        if(node.inFiles.length > 0) {
-          ps.push(build(node));
+      if(file instanceof Task) {
+        var task = file;
+        if(task.inComplete == task.inEdges) {
+          ps.push(build(task));
         }
-
-        node.forEach(function(out) {
-          nodes[out].inComplete++;
-          if(newWorking.indexOf(out) == -1)
-            newWorking.push(out); 
-        });
       } else {
-        newWorking.push(file);
+        var node = nodes[file];
+        if(node.inComplete == inEdges[file]) {
+          if(node.inFiles.length > 0) {
+            ps.push(build(node));
+          }
+
+          node.forEach(function(out) {
+            if(out instanceof Task) {
+              out.inComplete++;
+            } else {
+              nodes[out].inComplete++;
+            }
+
+            if(newWorking.indexOf(out) == -1)
+              newWorking.push(out); 
+          });
+        } else {
+          newWorking.push(file);
+        }
       }
     });
 
-    Promise.all(ps).then(function() {
-      digest(newWorking);
+    Promise.settle(ps).then(function(results) {
+      var anyRejected = false;
+      results.forEach(function(i) {
+        if(i.isRejected())
+          anyRejected = true;
+      });
+
+      if(anyRejected) console.log("An operation has failed. Aborting.");
+      else digest(newWorking);
     });
   }
 
   function done() {
-    if(createdCount === 0)
+    if(createdCount === 0 && taskCount === 0) {
       console.log("Nothing to be done.");
-    else if(createdCount === 1)
-      console.log("Created 1 file.");
-    else console.log("Created " + createdCount + " files.");
+    } else {
+      if(createdCount === 1)
+        console.log("Created 1 file.");
+      else if(createdCount > 0)
+        console.log("Created " + createdCount + " files.");
+
+      if(taskCount === 1)
+        console.log("Completed 1 task.");
+      else if(taskCount > 1)
+        console.log("Completed " + taskCount + " tasks.");
+    }
   }
 
   function build(node) {
-    if(needsUpdate(node.inFiles, [node.file])) {
+    if(node instanceof Task) {
+      //(ibw) Just do it ✓
+      taskCount++;
+      return node.rule.op(buildInputs(), [node.file]);
+    } else if(needsUpdate(node.inFiles, [node.file])) {
       createdCount++;
 
       if(options.verbose)
         console.log(node.inFiles.join(" "), "->", node.file);
 
-      var inputs = [];
-      node.inFiles.forEach(function(file) {
-        inputs.push(new Input(file));
-      });
-
-      var out = node.rule.op(inputs, [node.file]);
+      var out = node.rule.op(buildInputs(), [node.file]);
       if(isPromise(out)) {
         return out.then(function(buffer) {
           if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
@@ -210,6 +279,14 @@ function fez(module) {
           });
         });
       }
+    }
+
+    function buildInputs() {
+      var inputs = [];
+      node.inFiles.forEach(function(file) {
+        inputs.push(new Input(file));
+      });
+      return inputs;
     }
   }
 }
