@@ -12,6 +12,7 @@
     "is-promise": "~1.0.0",
     "bluebird": "~0.11.6-0"
   },
+  "main": "src/main.js",
   "devDependencies": {
     "tape": "~2.3.2",
     "runtests": "~0.1.1"
