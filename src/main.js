@@ -348,6 +348,11 @@ function fez(module) {
         node.inFiles.forEach(function(file) {
           inputs.push(new Input(file));
         });
+
+        inputs.asBuffers = function() {
+          return this.map(function(i) { return i.asBuffer(); });
+        };
+
         return inputs;
       }
     }
