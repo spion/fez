@@ -18,7 +18,7 @@ var nopt = require("nopt"),
  *    |   ) |   *
  *    |    )|   *
  *    +----)+   *
- *      Fez     *
+ *      FEZ     *
  ****************/
 
 function fez(module) {
@@ -31,9 +31,9 @@ function fez(module) {
   });
 
   var ruleset = options.argv.remain.length ? options.argv.remain[0] : 'default';
-  stage(module.exports[ruleset]);
+  stage(module.exports[ruleset], false);
 
-  function stage(ruleset) {
+  function stage(ruleset, isChild) {
     var rules = [],
         requires = [];
 
@@ -45,9 +45,10 @@ function fez(module) {
       });
     }
 
-    //One to one relationships where you want to pass in multiple inputs (i.e from
-    //a glob, array, or generator). Repeats the operation for each input with the
-    //output.
+    //One to one relationships where you want to pass in multiple inputs (i.e
+    //from a glob, array, or generator). Repeats the operation for each input
+    //with the output. I'M NOT SURE I LIKE THE SEMANTICS OF THIS FUNCTION. USE
+    //AT YOUR OWN RISK. -ibw
     defineRule.each = function(inputs, outputs, operation) {
       toArray(inputs).forEach(function(input) {
         rules.push({ inputs: [input], outputs: toArray(outputs), op: operation, each: true });
@@ -82,20 +83,20 @@ function fez(module) {
     ruleset(defineRule);
 
     return new Promise(function(mResolve, mReject) {
-      nextRequire();
-      function nextRequire() {
+      nextRequire(false);
+      function nextRequire(prevWorkDone) {
         if(requires.length) {
-          stage(requires.shift()).then(function() {
-            nextRequire();
+          stage(requires.shift(), true).then(function(workDone) {
+            nextRequire(prevWorkDone || workDone);
           }, function(err) {
             console.log(err);
           });
         } else {
-          work();
+          work(prevWorkDone);
         }
       }
 
-      function work() {
+      function work(workDone) {
         var outs = [],
             nextTask = 0;
 
@@ -322,12 +323,21 @@ function fez(module) {
 
         function done() {
           if(createdCount === 0 && taskCount === 0 && !options.quiet) {
-            cursor.green();
-            console.log("Nothing to be done.");
-            cursor.reset();
-          }
+            if(!isChild && !workDone) {
+              cursor.green();
+              console.log("Nothing to be done.");
+              cursor.reset();
+            }
 
-          mResolve();
+            mResolve(false || workDone);
+          } else {
+            if(!isChild && workDone) {
+              cursor.green();
+              console.log("Success.");
+              cursor.reset();
+            }
+            mResolve(true);
+          }
         }
 
         function build(node) {
