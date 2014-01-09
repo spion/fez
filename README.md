@@ -1,6 +1,8 @@
 Fez
 ===
 
+[![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
+
 ![](fez.png)
 
 ![](https://dl.dropboxusercontent.com/u/10832827/out.gif)
