@@ -42,6 +42,8 @@ function fez(module) {
     //One to one or many to one relationships. Repeats the operation for each
     //output if there are multiple, passing the complete input array each time.
     function defineRule(inputs, outputs, operation) {
+      if(typeof outputs !== "string") throw new Error("Output argument of rule() must be a string");
+
       toArray(outputs).forEach(function(output) {
         rules.push({ inputs: toArray(inputs), outputs: [output], op: operation });
       });
@@ -52,6 +54,13 @@ function fez(module) {
     //with the output. I'M NOT SURE I LIKE THE SEMANTICS OF THIS FUNCTION. USE
     //AT YOUR OWN RISK. -ibw
     defineRule.each = function(inputs, outputs, operation) {
+      if(typeof outputs !== "function") throw new Error("Output argument of rule.each() must be a function");
+
+      //(ibw) will need to add a mechanism for array inputs once I sort out the
+      //semantics. See https://gist.github.com/isaacbw/8311616 for a possible
+      //use case.
+      if(Array.isArray(inputs)) throw new Error("Input argument of rule.each() must be a string");
+
       toArray(inputs).forEach(function(input) {
         rules.push({ inputs: [input], outputs: toArray(outputs), op: operation, each: true });
       });
