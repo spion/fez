@@ -1,7 +1,5 @@
-Fez
+Fez [![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
 ===
-
-[![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
 
 ![](fez.png)
 
