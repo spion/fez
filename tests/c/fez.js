@@ -1,7 +1,7 @@
 var fez = require("../../src/main.js");
 
 exports.build = function(rule) {
-  rule("*.c", fez.mapFile("%f.o"), fez.exec("gcc -Wall -c %i -o %o"));
+  rule.each("*.c", fez.mapFile("%f.o"), fez.exec("gcc -Wall -c %i -o %o"));
   rule("*.o", "hello", fez.exec("gcc %i -o %o"));
 };
 
