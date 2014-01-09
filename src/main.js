@@ -13,21 +13,23 @@ var nopt = require("nopt"),
     Writable = require("stream").Writable,
     exec = require("child_process").exec;
 
-/****************
- *     --o--    *
- *    |   ) |   *
- *    |    )|   *
- *    +----)+   *
- *      FEZ     *
- ****************/
+/*****************
+ *     --o--     *
+ *    |   ) |    *
+ *    |    )|    *
+ *    +----)+    *
+ *      FEZ      *
+ *****************/
 
 function fez(module) {
   var options = nopt({
     "verbose": Boolean,
-    "quiet": Boolean
+    "quiet": Boolean,
+    "clean": Boolean
   }, {
     "v": "--verbose",
-    "q": "--quet"
+    "q": "--quet",
+    "c": "--clean"
   });
 
   var ruleset = options.argv.remain.length ? options.argv.remain[0] : 'default';
@@ -215,7 +217,7 @@ function fez(module) {
           });
         } while(changed);
 
-        //Our build graph, turned into node-> form from the edge list we have
+        //Create a build graph in object form from the edge list we have
         //currently
         var nodes = {};
         rules.forEach(function(rule) {
@@ -255,19 +257,42 @@ function fez(module) {
           delete rule.files;
         });
 
-        var working = [];
-
-        //Calculate the set of nodes with zero inputs (source nodes), use them to
-        //bootstrap the build process.
-        for(var filename in nodes) {
-          var node = nodes[filename];
-          if(node.inEdges === 0) working.push(filename);
-        }
-
-        var createdCount = 0,
+        var working = [],
+            createdCount = 0,
             taskCount = 0;
 
-        digest(working);
+        if(options.clean) {
+          var toDelete = [];
+          for(var filename in nodes) {
+            var node = nodes[filename];
+            if(node.inEdges > 0) toDelete.push(filename);
+          }
+
+          var any = false;
+          toDelete.forEach(function(file) {
+            try {
+              fs.unlinkSync(file);
+              process.stdout.write("Removing ");
+              cursor.red();
+              console.log(file);
+              cursor.reset();
+              any = true;
+            } catch (e) { }
+          });
+
+          if(!any) console.log("Nothing to clean.");
+
+        } else {
+          //Calculate the set of nodes with zero inputs (source nodes), use them to
+          //bootstrap the build process.
+          for(var filename in nodes) {
+            var node = nodes[filename];
+            if(node.inEdges === 0) working.push(filename);
+          }
+
+          digest(working);
+
+        }
         function digest(working) {
           if(!working.length) return done();
 
