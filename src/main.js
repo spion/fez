@@ -11,7 +11,8 @@ var nopt = require("nopt"),
     mkdirp = require("mkdirp"),
     assert = require("assert"),
     Writable = require("stream").Writable,
-    exec = require("child_process").exec;
+    exec = require("child_process").exec,
+    Input = require("./input");
 
 /*****************
  *     --o--     *
@@ -466,27 +467,7 @@ fez.mapFile = function(pattern) {
   };
 };
 
-function Input(filename) {
-  this._filename = filename;
-}
 
-Input.prototype.asBuffer = function() {
-  var file = this._filename;
-  return new Promise(function(resolve, reject) {
-    fs.readFile(file, function(err, data) {
-      if(err) reject(err);
-      else resolve(data);
-    });
-  });
-};
-
-Input.prototype.asStream = function() {
-
-};
-
-Input.prototype.getFilename = function() {
-  return this._filename;
-};
 
 function toArray(obj) {
   if(Array.isArray(obj)) return obj;
