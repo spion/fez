@@ -1,6 +1,8 @@
+[![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
+
 ![](fez.png)
 
-[![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
+Fez is an über fast build tool based on [tup][2] and engineered for Javascript. Build specs are defined as sets of transformational relationships between files. This set of rules is used to construct a build graph which is efficiently traversable, enabling Fez to do only the work which needs to be done, and to do work in parallel where appropriate. Fez is *fast*, the internals are *clever*, and build specs are *succinct*.
 
 Let's say we have the following ruleset:
 
@@ -21,7 +23,7 @@ Generating the build graph like this does a few things. First, it makes sure
 everything that *needs* to be built *is* built. Less intelligent build systems
 may skip over necessary files, or offer less flexibility in rule definitions to
 avoid potential problems. Second, the build graph speeds things up. Rather than
-making multiple passes to make sure every file is handled, fez works its way up
+making multiple passes to make sure every file is handled, Fez works its way up
 (with a topological sort) from the source nodes of the graph (files which
 already exist on the file system) to the sink nodes (files which have no further
 outputs). Third, it gives us an opportunity to introduce concurrency (see the
@@ -31,7 +33,7 @@ Using
 -----
 
 Fez build specs are simple Javascript files, usually called `fez.js` in a
-project's root directory. There is no command line fez tool; instead, fez build
+project's root directory. There is no command line Fez tool; instead, Fez build
 specs are self-executable.  The basic outline of a `fez.js` file usually
 something like this:
 
@@ -64,7 +66,7 @@ every ruleset is a function, and is named.
 
     exports.default = exports.build;
 
-The ruleset named `default` has special meaning in fez. When `fez.js` is run
+The ruleset named `default` has special meaning in Fez. When `fez.js` is run
 without any command line options (i.e `node fez.js`), the `default` ruleset is
 run.  We specify the `default` ruleset just like any other: by adding a field
 named `default` to `module.exports`.
@@ -74,7 +76,7 @@ named `default` to `module.exports`.
 This is the tiny bit of magic that makes `fez.js` self-executable.  The `fez`
 function takes a module (almost always the current module) as an argument. If
 that module is the *main* module (i.e the file which was run with `node
-fez.js`), fez will parse command line options and run the builds generated from
+fez.js`), Fez will parse command line options and run the builds generated from
 the rulesets in the module. This line should be in every build spec unless you
 are sure you will never want to run the build spec on its own. It is safe (and
 recommended) to include the line even in build specs which will be used
@@ -133,7 +135,7 @@ minus its extension. The `rule.each` function *must* have a function as the
 output argument. Fez has a handful of utility function generators for building
 the output function. Perhaps the most useful is `fez.mapFile`. There is also
 `fez.patsubst` which is a lot like the [make][1] function by the same name. Read
-below for more details on fez's utilities.
+below for more details on Fez's utilities.
 
 The rule and files above  will result in the following build
 graph:
@@ -151,3 +153,4 @@ relationship like that, it would be great for you to submit your use case in a
 bug report!.
 
 [1]: https://www.gnu.org/software/make/
+[2]: http://gittup.org/tup/
