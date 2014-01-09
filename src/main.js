@@ -146,7 +146,7 @@ function fez(module) {
           var task;
 
           //Create a new Task instance for every input file in the rule
-          if(rule.task && !rule.each) {
+          if(rule.task && rule.inputs.length > 1) {
             task = new Task(rule);
           }
           
@@ -156,7 +156,7 @@ function fez(module) {
           rule.inputs.forEach(function(input) {
             var files = glob.sync(input);
             files.forEach(function(file) {
-              if(rule.task && rule.each) {
+              if(rule.task && rule.inputs.length === 0) {
                 //This file is an input to a task and since the rule is an 'each'
                 //rule, create a new Task. This means a single Task will have a single
                 //input.
@@ -173,9 +173,8 @@ function fez(module) {
 
                 //If it's an 'each' rule, generate the output filename as a function
                 //of the input, otherwise use a static output filename.
-                var out;
-                if(rule.each) out = rule.outputs[0](file); 
-                else out = rule.outputs[0];
+                var out = rule.outputs[0];
+                if(typeof out === "function") out = rule.outputs[0](file); 
 
                 //Add the output to the outs list for future calls to oglob
                 outs.push(out);
@@ -205,9 +204,8 @@ function fez(module) {
                   //We're changing the edge list; trigger another iteration of the loop
                   changed = true;
 
-                  var out;
-                  if(rule.each) out = rule.outputs[0](file);
-                  else out = rule.outputs[0];
+                  var out = rule.outputs[0];
+                  if(typeof out === "function") out = rule.outputs[0](file); 
 
                   outs.push(out);
                   rule.files[file] = out;
