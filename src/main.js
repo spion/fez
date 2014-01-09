@@ -334,9 +334,7 @@ function fez(module) {
 
             if(anyRejected) {
               if(!options.quiet) {
-                cursor.red();
                 console.log("An operation has failed. Aborting.");
-                cursor.reset();
               }
             } else {
               digest(newWorking);
@@ -347,17 +345,13 @@ function fez(module) {
         function done() {
           if(createdCount === 0 && taskCount === 0 && !options.quiet) {
             if(!isChild && !workDone) {
-              cursor.green();
               console.log("Nothing to be done.");
-              cursor.reset();
             }
 
             mResolve(false || workDone);
           } else {
             if(!isChild && workDone) {
-              cursor.green();
               console.log("Success.");
-              cursor.reset();
             }
             mResolve(true);
           }
