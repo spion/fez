@@ -1,8 +1,8 @@
-![](fez.png)
-
-[![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
+<img src="fez.png" style="width: 250px; margin: 0 auto;" />
 
 ![](https://dl.dropboxusercontent.com/u/10832827/out.gif)
+
+[![Build Status](https://travis-ci.org/isaacbw/fez.png?branch=master)](https://travis-ci.org/isaacbw/fez)
 
 Let's say we have the following ruleset:
 
