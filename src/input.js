@@ -1,3 +1,6 @@
+var Promise = require("bluebird"),
+    fs = require("fs");
+
 function Input(filename) {
   this._filename = filename;
 }

@@ -12,7 +12,10 @@ var nopt = require("nopt"),
     assert = require("assert"),
     Writable = require("stream").Writable,
     exec = require("child_process").exec,
-    Input = require("./input");
+    Input = require("./input"),
+    generateBuildGraph = require("./graph"),
+    fezUtil = require("./util"),
+    xtend = require("xtend/mutable");
 
 /*****************
  *     --o--     *
@@ -42,29 +45,25 @@ function fez(module) {
 
     //One to one or many to one relationships. Repeats the operation for each
     //output if there are multiple, passing the complete input array each time.
-    function defineRule(inputs, outputs, operation) {
-      if(typeof outputs !== "string") throw new Error("Output argument of rule() must be a string");
+    function defineRule(inputs, output, operation) {
+      if(typeof output !== "string") throw new Error("Output argument of rule() must be a string");
 
-      toArray(outputs).forEach(function(output) {
-        rules.push({ inputs: toArray(inputs), outputs: [output], op: operation });
-      });
+      rules.push({ inputs: toArray(inputs), output: output, op: operation });
     }
 
     //One to one relationships where you want to pass in multiple inputs (i.e
     //from a glob, array, or generator). Repeats the operation for each input
     //with the output. I'M NOT SURE I LIKE THE SEMANTICS OF THIS FUNCTION. USE
     //AT YOUR OWN RISK. -ibw
-    defineRule.each = function(inputs, outputs, operation) {
-      if(typeof outputs !== "function") throw new Error("Output argument of rule.each() must be a function");
+    defineRule.each = function(input, output, operation) {
+      if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
 
       //(ibw) will need to add a mechanism for array inputs once I sort out the
       //semantics. See https://gist.github.com/isaacbw/8311616 for a possible
       //use case.
-      if(Array.isArray(inputs)) throw new Error("Input argument of rule.each() must be a string");
+      if(Array.isArray(input)) throw new Error("Input argument of rule.each() must be a string");
 
-      toArray(inputs).forEach(function(input) {
-        rules.push({ inputs: [input], outputs: toArray(outputs), op: operation, each: true });
-      });
+      rules.push({ input: input, output: output, op: operation, each: true });
     };
 
     //Pass complete input and output arrays to operation Useful for many-many
@@ -112,15 +111,6 @@ function fez(module) {
         var outs = [],
             nextTask = 0;
 
-        function oglob(pattern) {
-          var matches = [];
-          outs.forEach(function(out) {
-            if(minimatch(out, pattern))
-              matches.push(out);
-          });
-          return matches;
-        }
-
         var tasks = [];
         function Task(rule) {
           this.rule = rule;
@@ -129,219 +119,77 @@ function fez(module) {
           this.inFiles = [];
           tasks.push(this);
         }
-        
-        //Iterate over each rule. If the rule is not an 'each' rule, create a new Task
-        //object for the entire rule. Iterate over each input, find all the files that
-        //match the input glob. If the rule is an 'each' rule, output should be a
-        //function -- create an output node for each input file, named as a function
-        //of the input file (should also make it possible to have an equal-length
-        //array of output names). 
-        //
-        //   a -> f(a) = a'
-        //   b -> f(b) = b'
-        //   c -> f(c) = c'
-        //
-        //Otherwise, there will be a single shared output node for every input file in
-        //the rule.
-        //
-        //   a
-        //    \
-        //   b - abc'
-        //    /
-        //   c
-        //
-        //Right now it's impossible that there would be more than one meaningful
-        //output, until I put some more thought into 
-        rules.forEach(function(rule) {
-          var task;
 
-          //Create a new Task instance for every input file in the rule
-          if(rule.task && !rule.each) {
-            task = new Task(rule);
-          }
-          
-          //List of inputs->outputs associated with this rule.
-          rule.files = {};
-
-          rule.inputs.forEach(function(input) {
-            var files = glob.sync(input);
-            files.forEach(function(file) {
-              if(rule.task && rule.each) {
-                //This file is an input to a task and since the rule is an 'each'
-                //rule, create a new Task. This means a single Task will have a single
-                //input.
-                task = new Task();
-                task.rule = rule;
-                rule.files[file] = task;
-              } else if(rule.task) {
-                //File is an input to a task. Since the rule *isn't* an 'each' rule,
-                //use the shared task for the rule. This means a single task will have
-                //multiple inputs.
-                rule.files[file] = task;
-              } else {
-                //File is an input that is transformed into an output file.
-
-                //If it's an 'each' rule, generate the output filename as a function
-                //of the input, otherwise use a static output filename.
-                var out;
-                if(rule.each) out = rule.outputs[0](file); 
-                else out = rule.outputs[0];
-
-                //Add the output to the outs list for future calls to oglob
-                outs.push(out);
-
-                //Add the input->output relation to the rule's file list
-                rule.files[file] = out;
-              }
-            });
-          });
-        });
-
-        //Repeat the above iteration, this time using generated output files as inputs
-        //to the oglob function so that outputs become inputs of other operations,
-        //successively creating edge relationships to form a build graph. Keep
-        //repeating the iteration until there are no more changes to the edge list.
-        do {
-          var changed = false;
-          rules.forEach(function(rule) {
-            rule.inputs.forEach(function(input) {
-              //Find all the generated output filenames which match this input glob
-              var files = oglob(input);
-
-              //Iterate over them
-              files.forEach(function(file) {
-                //If the output isn't in the rule's output file list already, keep going
-                if(!rule.files[file]) {
-                  //We're changing the edge list; trigger another iteration of the loop
-                  changed = true;
-
-                  var out;
-                  if(rule.each) out = rule.outputs[0](file);
-                  else out = rule.outputs[0];
-
-                  outs.push(out);
-                  rule.files[file] = out;
-                }
-              });
-            });
-          });
-        } while(changed);
-
-        //Create a build graph in object form from the edge list we have
-        //currently
-        var nodes = {};
-        rules.forEach(function(rule) {
-          for(var input in rule.files) {
-            if(!nodes[input]) {
-              node = nodes[input] = [];
-              node.inComplete = 0;
-              node.inEdges = 0;
-              node.file = input;
-              node.inFiles = [];
-            }
-
-            var output = rule.files[input];
-            if(output instanceof Task) {
-              output.inEdges++;
-              output.inFiles.push(input);
-            } else {
-              var node;
-              if(!nodes[output]) {
-                node = nodes[output] = [];
-                node.inComplete = 0;
-                node.inEdges = 0;
-                node.file = output;
-                node.inFiles = [input];
-                node.rule = rule;
-              } else {
-                nodes[output].inFiles.push(input);
-                nodes[output].rule = rule;
-              }
-
-              nodes[output].inEdges++;
-            }
-
-            nodes[input].push(output);
-          }
-
-          delete rule.files;
-        });
-
-        var working = [],
+        var edges = generateBuildGraph(getAllMatchingInputs(rules), rules),
+            working = [],
             createdCount = 0,
             taskCount = 0;
 
-        if(options.clean) {
-          var toDelete = [];
-          for(var filename in nodes) {
-            var node = nodes[filename];
-            if(node.inEdges > 0) toDelete.push(filename);
+        function tasksForInput(input) {
+          var result = [];
+          for(var i = 0; i < edges.length; i++) {
+            var edge = edges[i];
+            if(edge[0] === input) {
+              result.push(edge[1]);
+            }
           }
 
-          var any = false;
-          toDelete.forEach(function(file) {
-            try {
-              fs.unlinkSync(file);
-              process.stdout.write("Removing ");
-              cursor.red();
-              console.log(file);
-              cursor.reset();
-              any = true;
-            } catch (e) { }
-          });
-
-          if(!any) console.log("Nothing to clean.");
-
-        } else {
-          //Calculate the set of nodes with zero inputs (source nodes), use them to
-          //bootstrap the build process.
-          for(var filename in nodes) {
-            var node = nodes[filename];
-            if(node.inEdges === 0) working.push(filename);
-          }
-
-          digest(working);
-
+          return result;
         }
+
+        //Create a build graph in object form from the edge list we have
+        //currently
+        var inEdges = {};
+        edges.forEach(function(edge) {
+          if(inEdges[edge[0]] === undefined)
+            inEdges[edge[0]] = { n: 0, op: edge[1] };
+          else if(inEdges.op === undefined)
+            inEdges.op = edge[1];
+
+          if(!inEdges[edge[1].output])
+            inEdges[edge[1].output] = {n: 1};
+          else
+            inEdges[edge[1].output].n++;
+        });
+
+        for(var node in inEdges) {
+          if(inEdges[node].n === 0) {
+            working.push(inEdges[node].op);
+            inEdges[node].op.inComplete = 1;
+          }
+        }
+
+        digest(working);
+
         function digest(working) {
           if(!working.length) return done();
 
           var newWorking = [];
-          var ps = [];
-          working.forEach(function(file) {
-            if(file instanceof Task) {
-              var task = file;
-              if(task.inComplete == task.inEdges) {
-                ps.push(build(task));
-              }
+          var promises = [];
+          working.forEach(function(op) {
+            //Ready to go?
+            if(op.inComplete === op.inEdges) {
+              promises.push(performOperation(op));
+
+              var outs = tasksForInput(op.output);
+              outs.forEach(function(out) {
+                out.inComplete++;
+              });
+
+              newWorking = union(newWorking, outs);
             } else {
-              var node = nodes[file];
-              if(node.inComplete == node.inEdges) {
-                if(node.inFiles.length > 0) {
-                  ps.push(build(node));
-                }
-
-                node.forEach(function(out) {
-                  if(out instanceof Task) {
-                    out.inComplete++;
-                  } else {
-                    nodes[out].inComplete++;
-                  }
-
-                  if(newWorking.indexOf(out) == -1)
-                    newWorking.push(out); 
-                });
-              } else {
-                newWorking.push(file);
-              }
+              //Put it back on the working list
+              newWorking.push(op);
             }
           });
 
-          Promise.settle(ps).then(function(results) {
+          Promise.settle(promises).then(function(results) {
             var anyRejected = false;
             results.forEach(function(i) {
-              if(i.isRejected())
+              if(i.isRejected()) {
                 anyRejected = true;
+                console.log(i);
+              }
             });
 
             if(anyRejected) {
@@ -352,7 +200,7 @@ function fez(module) {
               digest(newWorking);
             }
           });
-        }
+        } //end of digest()
 
         function done() {
           if(createdCount === 0 && taskCount === 0 && !options.quiet) {
@@ -369,56 +217,52 @@ function fez(module) {
           }
         }
 
-        function build(node) {
-          if(node instanceof Task) {
-            //(ibw) Just do it ✓
-            taskCount++;
-            return node.rule.op(buildInputs(), [node.file]);
-          } else {
-            if(options.verbose) {
-              console.log(node.inFiles.join(" "), "->", node.file);
-            }
+        function performOperation(op) {
+          if(options.verbose) {
+            console.log(op.inputs.join(" "), "->", op.output);
+          }
 
-            if(needsUpdate(node.inFiles, [node.file])) {
-              createdCount++;
-              
-              process.stdout.write("Creating ");
-              cursor.green();
-              process.stdout.write(node.file + "\n"); 
-              cursor.reset();
+          if(needsUpdate(op.inputs, [op.output])) {
+            createdCount++;
 
-              var out = node.rule.op(buildInputs(), [node.file]);
-              if(isPromise(out)) {
-                return out.then(function(buffer) {
-                  if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-                    var ps = [];
-                    ps.push(writep(node.file, buffer));
+            process.stdout.write("Creating ");
+            cursor.green();
+            process.stdout.write(op.output + "\n"); 
+            cursor.reset();
 
-                    return Promise.all(ps);
-                  }
-                });
-              } else if(out instanceof Writable) {
-                return new Promise(function(resolve, reject) {
-                  out.pipe(fs.createWriteStream(node.file));
-                  out.on("end", function() {
-                    resolve();
-                  });
-                });
-              }
-            }
+            var out = op.fn(buildInputs(), [op.output]);
+            if(isPromise(out)) {
+              return out.then(function(buffer) {
+                if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+                  var ps = [];
+                  ps.push(writep(op.output, buffer));
 
-            function buildInputs() {
-              var inputs = [];
-              node.inFiles.forEach(function(file) {
-                inputs.push(new Input(file));
+                  return Promise.all(ps);
+                } else {
+                  return true;
+                }
               });
-
-              inputs.asBuffers = function() {
-                return this.map(function(i) { return i.asBuffer(); });
-              };
-
-              return inputs;
+            } else if(out instanceof Writable) {
+              return new Promise(function(resolve, reject) {
+                out.pipe(fs.createWriteStream(op.output));
+                out.on("end", function() {
+                  resolve();
+                });
+              });
             }
+          }
+
+          function buildInputs() {
+            var inputs = [];
+            op.inputs.forEach(function(file) {
+              inputs.push(new Input(file));
+            });
+
+            inputs.asBuffers = function() {
+              return this.map(function(i) { return i.asBuffer(); });
+            };
+
+            return inputs;
           }
         }
       }
@@ -426,48 +270,7 @@ function fez(module) {
   }
 }
 
-fez.exec = function(command) {
-  return function(inputs, outputs) {
-    var ifiles = inputs.map(function(i) { return i.getFilename(); }).join(" "),
-        ofiles = outputs.join(" "),
-        pcommand = command.
-          replace("%i", ifiles).
-          replace("%o", ofiles);
-
-    return new Promise(function(resolve, reject) {
-      exec(pcommand, function(err) {
-        if(err) reject(err);
-        else resolve();
-      });
-    });
-  };
-};
-
-fez.mapFile = function(pattern) {
-  return function(input) {
-    var f = (function() {
-      var basename = path.basename(input);
-      var hidden = false;
-      if(basename.charAt(0) == ".") {
-        hidden = true;
-        basename = basename.slice(1);
-      }
-
-      var split = basename.split(".");
-      if(split.length > 1) {
-        if(hidden) return "." + split.slice(0, -1).join(".");
-        else return split.slice(0, -1).join(".");
-      } else {
-        if(hidden) return "." + basename;
-        else return basename;
-      }
-    })();
-
-    return pattern.replace("%f", f);
-  };
-};
-
-
+xtend(fez, fezUtil);
 
 function toArray(obj) {
   if(Array.isArray(obj)) return obj;
@@ -529,6 +332,23 @@ function union(a, b) {
   });
 
   return a2;
+}
+
+function merge(arrays) {
+  return arrays.reduce(function(prev, array) {
+    return prev.concat(array);
+  }, []);
+}
+
+function getAllMatchingInputs(rules) {
+  return merge(rules.map(getMatchingInputs));
+}
+
+function getMatchingInputs(rule) {
+  if(rule.each) return glob.sync(rule.input);
+  return merge(rule.inputs.map(function(globstring) {
+    return glob.sync(globstring);
+  }));
 }
 
 module.exports = fez;
