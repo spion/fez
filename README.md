@@ -54,7 +54,7 @@ Let's step through this line by line.
 Requiring `fez` isn't strictly necessary, but is needed to make `fez.js`
 self-executable. The only case in which you might not want it is if you have
 child build specs which are never run on their own. Even then, `fez` comes with
-a number of utility functions useful in crafting useful rulesets.
+a number of utility functions useful for crafting rulesets.
 
     exports.build = function(rule) {
 
