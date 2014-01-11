@@ -3,8 +3,7 @@ var xtend = require("xtend"),
 
 function generateBuildGraph(inputs, rules) {
   function itr(buckets, operations, outputs) {
-    var change = false,
-        newOutputs = []; //new outputs
+    var newOutputs = []; //new outputs
 
     function glob(pattern) {
       var matches = [];
@@ -16,36 +15,45 @@ function generateBuildGraph(inputs, rules) {
     }
 
     rules.forEach(function(rule, i) {
-      var bucket = buckets[i];
-      if(rule.each) checkInput(rule.input);
-      else rule.inputs.forEach(checkInput);
-
-      function checkInput(input) {
-        glob(input).forEach(function(match) {
-          if(!bucket[match]) {
-            change = true;
-            var output = outputForInput(rule, match);
-            if(rule.each) {
-              bucket[match] = new Operation(rule.op, output);
-            } else if (!operations[i]) {
-              bucket[match] = operations[i] = new Operation(rule.op, output);
-            } else {
-              bucket[match] = operations[i];
-              /*operations[i].inputs.push(match);
-              operations[i].inEdges++;*/
-            }
-
-            newOutputs.push(output);
-          }
-        });
-      }
+      if(rule.each) newOutputs = newOutputs.concat(checkInput(rule.input, rule, buckets[i], operations[i], glob));
+      else newOutputs = newOutputs.concat(checkInputs(rule.inputs, rule, buckets[i], operations[i], glob));
     });
     
-    if(change) return itr(buckets, operations, newOutputs);
+    if(newOutputs.length > 0) return itr(buckets, operations, newOutputs);
     else return buckets;
   }
 
   return edgesToNodeList(mergeBuckets(itr(genObjectArray(rules.length), [], cloneArray(inputs))));
+}
+
+function checkInputs(inputs, rule, bucket, operation, glob) {
+  var outputs = [];
+
+  inputs.forEach(function(input) {
+    outputs = outputs.concat(checkInput(input, rule, bucket, operation, glob));
+  });
+
+  return outputs;
+}
+
+function checkInput(input, rule, bucket, operation, glob) {
+  var outputs = [];
+  glob(input).forEach(function(match) {
+    if(!bucket[match]) {
+      var output = outputForInput(rule, match);
+
+      if(rule.each)
+        bucket[match] = new Operation(rule.op, output);
+      else if (!operation)
+        bucket[match] = operation = new Operation(rule.op, output);
+      else
+        bucket[match] = operation;
+
+      outputs.push(output);
+    }
+  });
+
+  return outputs;
 }
 
 function edgesToNodeList(edges) {

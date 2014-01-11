@@ -99,7 +99,7 @@ function stage(ruleset, isChild, options) {
   ruleset(defineRule);
 
   var anyWorkDone = false;
-  return (function nextRequire(prevWorkDone) {
+  return (function nextRequire() {
     if(requires.length) {
       return stage(requires.shift(), true, options).then(function(workDone) {
         anyWorkDone = anyWorkDone || workDone;
@@ -117,9 +117,9 @@ function work(rules, options, isChild, prevWorkDone) {
   if(options.clean) {
     var cleaned = clean(nodes, options);
     if(!cleaned && !isChild && !options.quiet)
-        console.log("Nothing to clean.");
-
-    return Promise.resolve(cleaned);
+      console.log("Nothing to clean.");
+    
+    return Promise.resolve(cleaned || prevWorkDone);
   } else {
     return build(nodes, isChild, prevWorkDone, options);
   }
@@ -159,26 +159,12 @@ function build(nodes, isChild, prevWorkDone, options) {
       if(node.isFile() && node.inputs.length === 0) working.push(node);
     });
 
-    return digest(nodes, working, options).then(done.bind(options, isChild, prevWorkDone));
+    return digest(nodes, working, options).then(done.bind(this, options, isChild, prevWorkDone));
   });
 }
 
-function done(options, isChild, prevWorkDone, anyWorkDone) {
-  if(!anyWorkDone === 0 && !options.quiet) {
-    if(!isChild && !prevWorkDone)
-      console.log("Nothing to be done.");
-
-    return false || prevWorkDone;
-  } else {
-    if(!isChild && prevWorkDone)
-      console.log("Success.");
-
-    return true;
-  }
-}
-
 function digest(nodes, working, options) {
-  if(working.length === 0) return false;
+  if(working.length === 0) return Promise.resolve(false);
 
   var newWorking = [];
   var promises = [];
@@ -203,26 +189,39 @@ function digest(nodes, working, options) {
   });
 
   return Promise.settle(promises).then(function(results) {
-    var anyRejected = false;
-    var anyWorkDone = false;
+    var anyRejected = false,
+        anyWorkDone = false;
+
     results.forEach(function(i) {
       if(i.isRejected()) {
         anyRejected = true;
         console.log(i);
       } else {
-        anyWorkdDone = anyWorkDone || i.value();
+        anyWorkDone = anyWorkDone || i.value();
       }
     });
 
     if(anyRejected) {
-      if(!options.quiet) {
+      if(!options.quiet)
         console.log("An operation has failed. Aborting.");
-        return anyWorkDone;
-      }
+      return anyWorkDone;
     } else {
-      return digest(nodes, newWorking, options) || anyWorkDone;
+      return digest(nodes, newWorking, options).then(function(workDone) {
+          return workDone || anyWorkDone;
+      });
     }
   });
+}
+
+function done(options, isChild, prevWorkDone, anyWorkDone) {
+  if(!anyWorkDone && !options.quiet) {
+    if(!isChild && !prevWorkDone)
+      console.log("Nothing to be done.");
+
+    return false || prevWorkDone;
+  } else {
+    return true;
+  }
 }
 
 function performOperation(options, op) {
