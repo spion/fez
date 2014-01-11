@@ -201,10 +201,7 @@ function performOperation(options, op) {
     if(isPromise(out)) {
       return out.then(function(buffer) {
         if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-          var ps = [];
-          ps.push(writep(op.output, buffer));
-
-          return Promise.all(ps);
+          return writep(op.output, buffer);
         } else {
           return true;
         }
@@ -216,7 +213,15 @@ function performOperation(options, op) {
           resolve();
         });
       });
+    } else if(typeof out === "string") {
+      return writep(op.output, new Buffer(out));
+    } else if(out instanceof Buffer) {
+      return writep(op.output, out);
+    } else {
+      throw new Error("Invalid operation output:", out);
     }
+  } else {
+    return false;
   }
 }
 
