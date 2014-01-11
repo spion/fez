@@ -98,179 +98,179 @@ function stage(ruleset, isChild, options) {
   var defineRule = createRuleFns(rules, requires);
   ruleset(defineRule);
 
-  return new Promise(function(mResolve, mReject) {
+  return new Promise(function() {
     var anyWorkDone = false;
-    (function nextRequire(prevWorkDone) {
+    return (function nextRequire(prevWorkDone) {
       if(requires.length) {
-        stage(requires.shift(), true, options).then(function(workDone) {
+        return stage(requires.shift(), true, options).then(function(workDone) {
           anyWorkDone = anyWorkDone || workDone;
-          nextRequire();
-        }, function(err) {
-          console.log(err);
+          return nextRequire();
         });
       } else {
-        work();
+        return work(rules, options, isChild, anyWorkDone);
       }
     })();
+  });
+}
 
-    function work() {
-      var outs = [],
-          nextTask = 0;
+function work(rules, options, isChild, prevWorkDone) {
+  return new Promise(function(resolve, reject) {
+    var outs = [],
+        nextTask = 0;
 
-      var tasks = [];
-      function Task(rule) {
-        this.rule = rule;
-        this.inEdges = 0;
-        this.inComplete = 0;
-        this.inFiles = [];
-        tasks.push(this);
+    var tasks = [];
+    function Task(rule) {
+      this.rule = rule;
+      this.inEdges = 0;
+      this.inComplete = 0;
+      this.inFiles = [];
+      tasks.push(this);
+    }
+
+    var edges = generateBuildGraph(getAllMatchingInputs(rules), rules),
+        working = [],
+        createdCount = 0,
+        taskCount = 0;
+
+    //Create a build graph in object form from the edge list we have
+    //currently
+    var inEdges = {};
+    edges.forEach(function(edge) {
+      if(inEdges[edge[0]] === undefined)
+        inEdges[edge[0]] = { n: 0, op: edge[1] };
+      else if(inEdges.op === undefined)
+        inEdges.op = edge[1];
+
+      if(!inEdges[edge[1].output])
+        inEdges[edge[1].output] = {n: 1};
+      else
+        inEdges[edge[1].output].n++;
+    });
+
+    for(var node in inEdges) {
+      if(inEdges[node].n === 0) {
+        working.push(inEdges[node].op);
+        inEdges[node].op.inComplete = 1;
       }
+    }
 
-      var edges = generateBuildGraph(getAllMatchingInputs(rules), rules),
-          working = [],
-          createdCount = 0,
-          taskCount = 0;
+    digest(edges, working, options).then(done);
 
-      function tasksForInput(input) {
-        var result = [];
-        for(var i = 0; i < edges.length; i++) {
-          var edge = edges[i];
-          if(edge[0] === input) {
-            result.push(edge[1]);
-          }
+    function done() {
+      if(createdCount === 0 && taskCount === 0 && !options.quiet) {
+        if(!isChild && !prevWorkDone) {
+          console.log("Nothing to be done.");
         }
 
-        return result;
+        resolve(false || prevWorkDone);
+      } else {
+        if(!isChild && prevWorkDone) {
+          console.log("Success.");
+        }
+        reject(true);
       }
+    }
 
-      //Create a build graph in object form from the edge list we have
-      //currently
-      var inEdges = {};
-      edges.forEach(function(edge) {
-        if(inEdges[edge[0]] === undefined)
-          inEdges[edge[0]] = { n: 0, op: edge[1] };
-        else if(inEdges.op === undefined)
-          inEdges.op = edge[1];
+  });
+}
 
-        if(!inEdges[edge[1].output])
-          inEdges[edge[1].output] = {n: 1};
-        else
-          inEdges[edge[1].output].n++;
+function tasksForInput(edges, input) {
+  var result = [];
+  for(var i = 0; i < edges.length; i++) {
+    var edge = edges[i];
+    if(edge[0] === input) {
+      result.push(edge[1]);
+    }
+  }
+
+  return result;
+}
+
+function performOperation(options, op) {
+  if(options.verbose) {
+    console.log(op.inputs.join(" "), "->", op.output);
+  }
+
+  if(needsUpdate(op.inputs, [op.output])) {
+    process.stdout.write("Creating ");
+    cursor.green();
+    process.stdout.write(op.output + "\n"); 
+    cursor.reset();
+
+    var out = op.fn(buildInputs(op), [op.output]);
+    if(isPromise(out)) {
+      return out.then(function(buffer) {
+        if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+          var ps = [];
+          ps.push(writep(op.output, buffer));
+
+          return Promise.all(ps);
+        } else {
+          return true;
+        }
+      });
+    } else if(out instanceof Writable) {
+      return new Promise(function(resolve, reject) {
+        out.pipe(fs.createWriteStream(op.output));
+        out.on("end", function() {
+          resolve();
+        });
+      });
+    }
+  }
+}
+
+function buildInputs(op) {
+  var inputs = [];
+  op.inputs.forEach(function(file) {
+    inputs.push(new Input(file));
+  });
+
+  inputs.asBuffers = function() {
+    return this.map(function(i) { return i.asBuffer(); });
+  };
+
+  return inputs;
+}
+
+function digest(edges, working, options) {
+  if(!working.length) return true;
+
+  var newWorking = [];
+  var promises = [];
+  working.forEach(function(op) {
+    //Ready to go?
+    if(op.inComplete === op.inEdges) {
+      promises.push(performOperation(options, op));
+
+      var outs = tasksForInput(edges, op.output);
+      outs.forEach(function(out) {
+        out.inComplete++;
       });
 
-      for(var node in inEdges) {
-        if(inEdges[node].n === 0) {
-          working.push(inEdges[node].op);
-          inEdges[node].op.inComplete = 1;
-        }
+      newWorking = union(newWorking, outs);
+    } else {
+      //Put it back on the working list
+      newWorking.push(op);
+    }
+  });
+
+  return Promise.settle(promises).then(function(results) {
+    var anyRejected = false;
+    results.forEach(function(i) {
+      if(i.isRejected()) {
+        anyRejected = true;
+        console.log(i);
       }
+    });
 
-      digest(working);
-
-      function digest(working) {
-        if(!working.length) return done();
-
-        var newWorking = [];
-        var promises = [];
-        working.forEach(function(op) {
-          //Ready to go?
-          if(op.inComplete === op.inEdges) {
-            promises.push(performOperation(op));
-
-            var outs = tasksForInput(op.output);
-            outs.forEach(function(out) {
-              out.inComplete++;
-            });
-
-            newWorking = union(newWorking, outs);
-          } else {
-            //Put it back on the working list
-            newWorking.push(op);
-          }
-        });
-
-        Promise.settle(promises).then(function(results) {
-          var anyRejected = false;
-          results.forEach(function(i) {
-            if(i.isRejected()) {
-              anyRejected = true;
-              console.log(i);
-            }
-          });
-
-          if(anyRejected) {
-            if(!options.quiet) {
-              console.log("An operation has failed. Aborting.");
-            }
-          } else {
-            digest(newWorking);
-          }
-        });
-      } //end of digest()
-
-      function done() {
-        if(createdCount === 0 && taskCount === 0 && !options.quiet) {
-          if(!isChild && !anyWorkDone) {
-            console.log("Nothing to be done.");
-          }
-
-          mResolve(false || workDone);
-        } else {
-          if(!isChild && anyWorkDone) {
-            console.log("Success.");
-          }
-          mResolve(true);
-        }
+    if(anyRejected) {
+      if(!options.quiet) {
+        console.log("An operation has failed. Aborting.");
+        return [];
       }
-
-      function performOperation(op) {
-        if(options.verbose) {
-          console.log(op.inputs.join(" "), "->", op.output);
-        }
-
-        if(needsUpdate(op.inputs, [op.output])) {
-          createdCount++;
-
-          process.stdout.write("Creating ");
-          cursor.green();
-          process.stdout.write(op.output + "\n"); 
-          cursor.reset();
-
-          var out = op.fn(buildInputs(), [op.output]);
-          if(isPromise(out)) {
-            return out.then(function(buffer) {
-              if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-                var ps = [];
-                ps.push(writep(op.output, buffer));
-
-                return Promise.all(ps);
-              } else {
-                return true;
-              }
-            });
-          } else if(out instanceof Writable) {
-            return new Promise(function(resolve, reject) {
-              out.pipe(fs.createWriteStream(op.output));
-              out.on("end", function() {
-                resolve();
-              });
-            });
-          }
-        }
-
-        function buildInputs() {
-          var inputs = [];
-          op.inputs.forEach(function(file) {
-            inputs.push(new Input(file));
-          });
-
-          inputs.asBuffers = function() {
-            return this.map(function(i) { return i.asBuffer(); });
-          };
-
-          return inputs;
-        }
-      }
+    } else {
+      return digest(edges, newWorking, options);
     }
   });
 }
