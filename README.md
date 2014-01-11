@@ -2,9 +2,9 @@
 
 ![](fez.png)
 
-Fez is an über fast build tool based on [tup][2] and engineered for Javascript. Build specs are defined as sets of transformational relationships between files. This set of rules is used to construct a build graph which is efficiently traversable, enabling Fez to do only the work which needs to be done, and to do work in parallel where appropriate. Fez is *fast*, the internals are *clever*, and build specs are *succinct*.
+Fez is an über fast build tool based on [tup][2] and engineered for Javascript. Build specs are defined as sets of transformational relationships between files. This set of rules is used to construct a build graph which is efficiently traversable, enabling Fez to do only the work which needs to be done, and to do work in parallel where appropriate.
 
-Let's say we have the following ruleset:
+Let's look at the following ruleset:
 
     *.less -> %f.css
     *.css -> %f.min.css
