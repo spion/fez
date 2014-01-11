@@ -98,65 +98,134 @@ function stage(ruleset, isChild, options) {
   var defineRule = createRuleFns(rules, requires);
   ruleset(defineRule);
 
-  return new Promise(function() {
-    var anyWorkDone = false;
-    return (function nextRequire(prevWorkDone) {
-      if(requires.length) {
-        return stage(requires.shift(), true, options).then(function(workDone) {
-          anyWorkDone = anyWorkDone || workDone;
-          return nextRequire();
-        });
-      } else {
-        return work(rules, options, isChild, anyWorkDone);
-      }
-    })();
-  });
+  var anyWorkDone = false;
+  return (function nextRequire(prevWorkDone) {
+    if(requires.length) {
+      return stage(requires.shift(), true, options).then(function(workDone) {
+        anyWorkDone = anyWorkDone || workDone;
+        return nextRequire();
+      });
+    } else {
+      return work(rules, options, isChild, anyWorkDone);
+    }
+  })();
 }
 
 function work(rules, options, isChild, prevWorkDone) {
-  return new Promise(function(resolve, reject) {
-    var outs = [],
-        nextTask = 0;
+  var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
-    var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules),
-        working = [],
-        createdCount = 0,
-        taskCount = 0;
+  if(options.clean) {
+    var p = clean(nodes);
+    p.then(function(work) {
+      if(!work && !isChild)
+        console.log("Nothing to clean.");
+    });
+    return p;
+  }
+
+  else return build(nodes, isChild, prevWorkDone, options);
+};
+
+function clean(nodes) {
+  return new Promise(function(resolve, reject) {
+    var files = [],
+        complete = 0,
+        any = false;
+
+    nodes.forEach(function(node) {
+      if(node.isFile() && node.inputs.length > 0) files.push(node.file);
+    });
+
+    files.forEach(function(file) {
+      try {
+        fs.unlinkSync(file);
+        any = true;
+
+        process.stdout.write("Removing ");
+        cursor.red();
+        console.log(file);
+        cursor.reset();
+      } catch(e) {}
+
+      resolve(any);
+    });
+
+    if(files.length === 0) resolve(false);
+  });
+}
+
+function build(nodes, isChild, prevWorkDone, options) {
+  return new Promise(function(resolve, reject) {
+    var working = [];
 
     nodes.forEach(function(node) {
       if(node.isFile() && node.inputs.length === 0) working.push(node);
     });
 
-    digest(nodes, working, options).then(done);
-
-    function done(anyWorkDone) {
-      if(!anyWorkDone === 0 && !options.quiet) {
-        if(!isChild && !prevWorkDone) {
-          console.log("Nothing to be done.");
-        }
-
-        resolve(false || prevWorkDone);
-      } else {
-        if(!isChild && prevWorkDone) {
-          console.log("Success.");
-        }
-        reject(true);
-      }
-    }
-
+    return digest(nodes, working, options).then(done.bind(options, isChild, prevWorkDone));
   });
 }
 
-function tasksForInput(edges, input) {
-  var result = [];
-  for(var i = 0; i < edges.length; i++) {
-    var edge = edges[i];
-    if(edge[0] === input) {
-      result.push(edge[1]);
-    }
-  }
+function done(options, isChild, prevWorkDone, anyWorkDone) {
+  if(!anyWorkDone === 0 && !options.quiet) {
+    if(!isChild && !prevWorkDone)
+      console.log("Nothing to be done.");
 
-  return result;
+    return false || prevWorkDone;
+  } else {
+    if(!isChild && prevWorkDone)
+      console.log("Success.");
+
+    return true;
+  }
+}
+
+function digest(nodes, working, options) {
+  if(working.length === 0) return false;
+
+  var newWorking = [];
+  var promises = [];
+  working.forEach(function(node) {
+    if(node.isFile()) {
+      node.outputs.forEach(function(out) {
+        out.inComplete++;
+        if(newWorking.indexOf(out) === -1)
+          newWorking.push(out);
+      });
+    } else {//It's an operation
+      //Is it ready to go?
+      if(node.inComplete === node.inputs.length) {
+        //Yes, do the operation and put the output on the working list
+        promises.push(performOperation(options, node));
+        newWorking.push(node.output);
+      } else {
+        //No, put it back on the working list
+        newWorking.push(node);
+      }
+    }
+  });
+
+  return Promise.settle(promises).then(function(results) {
+    var anyRejected = false;
+    var anyWorkDone = false;
+    results.forEach(function(i) {
+      if(i.isRejected()) {
+        anyRejected = true;
+        console.log(i);
+      } else {
+        anyWorkdDone = anyWorkDone || i.value();
+      }
+    });
+
+    if(anyRejected) {
+      if(!options.quiet) {
+        console.log("An operation has failed. Aborting.");
+        return anyWorkDone;
+      }
+    } else {
+      return digest(nodes, newWorking, options) || anyWorkDone;
+    }
+  });
 }
 
 function performOperation(options, op) {
@@ -212,54 +281,6 @@ function buildInputs(files) {
   };
 
   return inputs;
-}
-
-function digest(nodes, working, options) {
-  if(working.length === 0) return false;
-
-  var newWorking = [];
-  var promises = [];
-  working.forEach(function(node) {
-    if(node.isFile()) {
-      node.outputs.forEach(function(out) {
-        out.inComplete++;
-        if(newWorking.indexOf(out) === -1)
-          newWorking.push(out);
-      });
-    } else {//It's an operation
-      //Is it ready to go?
-      if(node.inComplete === node.inputs.length) {
-        //Yes, do the operation and put the output on the working list
-        promises.push(performOperation(options, node));
-        newWorking.push(node.output);
-      } else {
-        //No, put it back on the working list
-        newWorking.push(node);
-      }
-    }
-  });
-
-  return Promise.settle(promises).then(function(results) {
-    var anyRejected = false;
-    var anyWorkDone = false;
-    results.forEach(function(i) {
-      if(i.isRejected()) {
-        anyRejected = true;
-        console.log(i);
-      } else {
-        anyWorkdDone = anyWorkDone || i.value();
-      }
-    });
-
-    if(anyRejected) {
-      if(!options.quiet) {
-        console.log("An operation has failed. Aborting.");
-        return anyWorkDone;
-      }
-    } else {
-      return digest(nodes, newWorking, options) || anyWorkDone;
-    }
-  });
 }
 
 xtend(fez, fezUtil);
