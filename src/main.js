@@ -118,46 +118,19 @@ function work(rules, options, isChild, prevWorkDone) {
     var outs = [],
         nextTask = 0;
 
-    var tasks = [];
-    function Task(rule) {
-      this.rule = rule;
-      this.inEdges = 0;
-      this.inComplete = 0;
-      this.inFiles = [];
-      tasks.push(this);
-    }
-
-    var edges = generateBuildGraph(getAllMatchingInputs(rules), rules),
+    var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules),
         working = [],
         createdCount = 0,
         taskCount = 0;
 
-    //Create a build graph in object form from the edge list we have
-    //currently
-    var inEdges = {};
-    edges.forEach(function(edge) {
-      if(inEdges[edge[0]] === undefined)
-        inEdges[edge[0]] = { n: 0, op: edge[1] };
-      else if(inEdges.op === undefined)
-        inEdges.op = edge[1];
-
-      if(!inEdges[edge[1].output])
-        inEdges[edge[1].output] = {n: 1};
-      else
-        inEdges[edge[1].output].n++;
+    nodes.forEach(function(node) {
+      if(node.isFile() && node.inputs.length === 0) working.push(node);
     });
 
-    for(var node in inEdges) {
-      if(inEdges[node].n === 0) {
-        working.push(inEdges[node].op);
-        inEdges[node].op.inComplete = 1;
-      }
-    }
+    digest(nodes, working, options).then(done);
 
-    digest(edges, working, options).then(done);
-
-    function done() {
-      if(createdCount === 0 && taskCount === 0 && !options.quiet) {
+    function done(anyWorkDone) {
+      if(!anyWorkDone === 0 && !options.quiet) {
         if(!isChild && !prevWorkDone) {
           console.log("Nothing to be done.");
         }
@@ -188,20 +161,23 @@ function tasksForInput(edges, input) {
 
 function performOperation(options, op) {
   if(options.verbose) {
-    console.log(op.inputs.join(" "), "->", op.output);
+    console.log(op.inputs.map(function(i) { return i.file; }).join(" "), "->", op.output.file);
   }
 
-  if(needsUpdate(op.inputs, [op.output])) {
+  var inputs = op.inputs.map(function(i) { return i.file; }),
+      output = op.output.file;
+
+  if(needsUpdate(inputs, [output])) {
     process.stdout.write("Creating ");
     cursor.green();
-    process.stdout.write(op.output + "\n"); 
+    process.stdout.write(output + "\n"); 
     cursor.reset();
 
-    var out = op.fn(buildInputs(op), [op.output]);
+    var out = op.fn(buildInputs(inputs), [output]);
     if(isPromise(out)) {
       return out.then(function(buffer) {
         if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-          return writep(op.output, buffer);
+          return writep(output, buffer);
         } else {
           return true;
         }
@@ -214,9 +190,9 @@ function performOperation(options, op) {
         });
       });
     } else if(typeof out === "string") {
-      return writep(op.output, new Buffer(out));
+      return writep(output, new Buffer(out));
     } else if(out instanceof Buffer) {
-      return writep(op.output, out);
+      return writep(output, out);
     } else {
       throw new Error("Invalid operation output:", out);
     }
@@ -225,9 +201,9 @@ function performOperation(options, op) {
   }
 }
 
-function buildInputs(op) {
+function buildInputs(files) {
   var inputs = [];
-  op.inputs.forEach(function(file) {
+  files.forEach(function(file) {
     inputs.push(new Input(file));
   });
 
@@ -238,44 +214,50 @@ function buildInputs(op) {
   return inputs;
 }
 
-function digest(edges, working, options) {
-  if(!working.length) return true;
+function digest(nodes, working, options) {
+  if(working.length === 0) return false;
 
   var newWorking = [];
   var promises = [];
-  working.forEach(function(op) {
-    //Ready to go?
-    if(op.inComplete === op.inEdges) {
-      promises.push(performOperation(options, op));
-
-      var outs = tasksForInput(edges, op.output);
-      outs.forEach(function(out) {
+  working.forEach(function(node) {
+    if(node.isFile()) {
+      node.outputs.forEach(function(out) {
         out.inComplete++;
+        if(newWorking.indexOf(out) === -1)
+          newWorking.push(out);
       });
-
-      newWorking = union(newWorking, outs);
-    } else {
-      //Put it back on the working list
-      newWorking.push(op);
+    } else {//It's an operation
+      //Is it ready to go?
+      if(node.inComplete === node.inputs.length) {
+        //Yes, do the operation and put the output on the working list
+        promises.push(performOperation(options, node));
+        newWorking.push(node.output);
+      } else {
+        //No, put it back on the working list
+        newWorking.push(node);
+      }
     }
   });
 
   return Promise.settle(promises).then(function(results) {
     var anyRejected = false;
+    var anyWorkDone = false;
     results.forEach(function(i) {
       if(i.isRejected()) {
         anyRejected = true;
         console.log(i);
+      } else {
+        anyWorkdDone = anyWorkDone || i.value();
       }
     });
 
     if(anyRejected) {
       if(!options.quiet) {
         console.log("An operation has failed. Aborting.");
-        return [];
+        return anyWorkDone;
       }
     } else {
-      return digest(edges, newWorking, options);
+      return digest(nodes, newWorking, options) || anyWorkDone;
     }
   });
 }
@@ -334,6 +316,7 @@ function needsUpdate(inputs, outputs) {
   return newestInput > oldestOutput;
 }
 
+//(ibw) should switch to a real set data structure for maximum performance
 function union(a, b) {
   var a2 = a.filter(function() { return true; });
   b.forEach(function(e) {
