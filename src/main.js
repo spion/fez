@@ -32,7 +32,7 @@ function fez(module) {
     "clean": Boolean
   }, {
     "v": "--verbose",
-    "q": "--quet",
+    "q": "--quiet",
     "c": "--clean"
   });
 
@@ -115,9 +115,9 @@ function work(rules, options, isChild, prevWorkDone) {
   var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
   if(options.clean) {
-    var p = clean(nodes);
+    var p = clean(nodes, options);
     p.then(function(work) {
-      if(!work && !isChild)
+      if(!work && !isChild && !options.quiet)
         console.log("Nothing to clean.");
     });
     return p;
@@ -126,7 +126,7 @@ function work(rules, options, isChild, prevWorkDone) {
   else return build(nodes, isChild, prevWorkDone, options);
 };
 
-function clean(nodes) {
+function clean(nodes, options) {
   return new Promise(function(resolve, reject) {
     var files = [],
         complete = 0,
@@ -140,11 +140,13 @@ function clean(nodes) {
       try {
         fs.unlinkSync(file);
         any = true;
-
-        process.stdout.write("Removing ");
-        cursor.red();
-        console.log(file);
-        cursor.reset();
+        
+        if(!options.quiet) {
+          process.stdout.write("Removing ");
+          cursor.red();
+          console.log(file);
+          cursor.reset();
+        }
       } catch(e) {}
 
       resolve(any);
@@ -237,10 +239,12 @@ function performOperation(options, op) {
       output = op.output.file;
 
   if(needsUpdate(inputs, [output])) {
-    process.stdout.write("Creating ");
-    cursor.green();
-    process.stdout.write(output + "\n"); 
-    cursor.reset();
+    if(!options.quiet) {
+      process.stdout.write("Creating ");
+      cursor.green();
+      process.stdout.write(output + "\n"); 
+      cursor.reset();
+    }
 
     var out = op.fn(buildInputs(inputs), [output]);
     if(isPromise(out)) {
