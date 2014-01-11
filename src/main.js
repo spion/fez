@@ -115,45 +115,40 @@ function work(rules, options, isChild, prevWorkDone) {
   var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
   if(options.clean) {
-    var p = clean(nodes, options);
-    p.then(function(work) {
-      if(!work && !isChild && !options.quiet)
+    var cleaned = clean(nodes, options);
+    if(!cleaned && !isChild && !options.quiet)
         console.log("Nothing to clean.");
-    });
-    return p;
-  }
 
-  else return build(nodes, isChild, prevWorkDone, options);
+    return Promise.resolve(cleaned);
+  } else {
+    return build(nodes, isChild, prevWorkDone, options);
+  }
 };
 
 function clean(nodes, options) {
-  return new Promise(function(resolve, reject) {
-    var files = [],
-        complete = 0,
-        any = false;
+  var files = [],
+      complete = 0,
+      any = false;
 
-    nodes.forEach(function(node) {
-      if(node.isFile() && node.inputs.length > 0) files.push(node.file);
-    });
-
-    files.forEach(function(file) {
-      try {
-        fs.unlinkSync(file);
-        any = true;
-        
-        if(!options.quiet) {
-          process.stdout.write("Removing ");
-          cursor.red();
-          console.log(file);
-          cursor.reset();
-        }
-      } catch(e) {}
-
-      resolve(any);
-    });
-
-    if(files.length === 0) resolve(false);
+  nodes.forEach(function(node) {
+    if(node.isFile() && node.inputs.length > 0) files.push(node.file);
   });
+
+  files.forEach(function(file) {
+    try {
+      fs.unlinkSync(file);
+      any = true;
+      
+      if(!options.quiet) {
+        process.stdout.write("Removing ");
+        cursor.red();
+        console.log(file);
+        cursor.reset();
+      }
+    } catch(e) {}
+  });
+
+  return any;
 }
 
 function build(nodes, isChild, prevWorkDone, options) {
