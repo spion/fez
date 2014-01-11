@@ -37,237 +37,242 @@ function fez(module) {
   });
 
   var ruleset = options.argv.remain.length ? options.argv.remain[0] : 'default';
-  stage(module.exports[ruleset], false);
+  stage(module.exports[ruleset], false, options);
+}
 
-  function stage(ruleset, isChild) {
-    var rules = [],
-        requires = [];
+function createRuleFns(rules, requires) {
+  function defineRule(inputs, output, operation) {
+    if(typeof output !== "string") throw new Error("Output argument of rule() must be a string");
 
-    //One to one or many to one relationships. Repeats the operation for each
-    //output if there are multiple, passing the complete input array each time.
-    function defineRule(inputs, output, operation) {
-      if(typeof output !== "string") throw new Error("Output argument of rule() must be a string");
+    rules.push({ inputs: toArray(inputs), output: output, op: operation });
+  }
 
-      rules.push({ inputs: toArray(inputs), output: output, op: operation });
-    }
+  //One to one relationships where you want to pass in multiple inputs (i.e
+  //from a glob, array, or generator). Repeats the operation for each input
+  //with the output. I'M NOT SURE I LIKE THE SEMANTICS OF THIS FUNCTION. USE
+  //AT YOUR OWN RISK. -ibw
+  defineRule.each = function(input, output, operation) {
+    if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
 
-    //One to one relationships where you want to pass in multiple inputs (i.e
-    //from a glob, array, or generator). Repeats the operation for each input
-    //with the output. I'M NOT SURE I LIKE THE SEMANTICS OF THIS FUNCTION. USE
-    //AT YOUR OWN RISK. -ibw
-    defineRule.each = function(input, output, operation) {
-      if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
+    //(ibw) will need to add a mechanism for array inputs once I sort out the
+    //semantics. See https://gist.github.com/isaacbw/8311616 for a possible
+    //use case.
+    if(Array.isArray(input)) throw new Error("Input argument of rule.each() must be a string");
 
-      //(ibw) will need to add a mechanism for array inputs once I sort out the
-      //semantics. See https://gist.github.com/isaacbw/8311616 for a possible
-      //use case.
-      if(Array.isArray(input)) throw new Error("Input argument of rule.each() must be a string");
+    rules.push({ input: input, output: output, op: operation, each: true });
+  };
 
-      rules.push({ input: input, output: output, op: operation, each: true });
-    };
+  //Pass complete input and output arrays to operation Useful for many-many
+  //operations, which should really be limited to shell commands. Native fez
+  //operations should try very hard to be one-one or many-one operations with a
+  //single output.
+  defineRule.many = function(inputs, outputs, operation) {
+    rules.push({ inputs: toArray(inputs), outputs: toArray(outputs), op: operation, many: true });
+  };
+  
+  //A task is a special rule which has no output. It will be run each time the
+  //ruleset is run, since there are no output files with which to compare
+  //timestamps.
+  defineRule.task = function(inputs, operation) {
+    rules.push({ inputs: toArray(inputs), op: operation, task: true });
+  };
 
-    //Pass complete input and output arrays to operation Useful for many-many
-    //operations, which should really be limited to shell commands. Native fez
-    //operations should try very hard to be one-one or many-one operations with a
-    //single output.
-    defineRule.many = function(inputs, outputs, operation) {
-      rules.push({ inputs: toArray(inputs), outputs: toArray(outputs), op: operation, many: true });
-    };
-    
-    //A task is a special rule which has no output. It will be run each time the
-    //ruleset is run, since there are no output files with which to compare
-    //timestamps.
-    defineRule.task = function(inputs, operation) {
-      rules.push({ inputs: toArray(inputs), op: operation, task: true });
-    };
+  defineRule.task.each = function(inputs, operation) {
+    toArray(inputs).forEach(function(input) {
+      rules.push({ inputs: [input], op: operation, task: true, each: true });
+    });
+  };
 
-    defineRule.task.each = function(inputs, operation) {
-      toArray(inputs).forEach(function(input) {
-        rules.push({ inputs: [input], op: operation, task: true, each: true });
+  defineRule.requires = function(ruleset) {
+    requires = requires.concat(toArray(ruleset));
+  };
+
+  return defineRule;
+}
+
+function stage(ruleset, isChild, options) {
+  var rules = [], requires = [];
+
+  //One to one or many to one relationships. Repeats the operation for each
+  //output if there are multiple, passing the complete input array each time.
+  var defineRule = createRuleFns(rules, requires);
+  ruleset(defineRule);
+
+  return new Promise(function(mResolve, mReject) {
+    var anyWorkDone = false;
+    (function nextRequire(prevWorkDone) {
+      if(requires.length) {
+        stage(requires.shift(), true, options).then(function(workDone) {
+          anyWorkDone = anyWorkDone || workDone;
+          nextRequire();
+        }, function(err) {
+          console.log(err);
+        });
+      } else {
+        work();
+      }
+    })();
+
+    function work() {
+      var outs = [],
+          nextTask = 0;
+
+      var tasks = [];
+      function Task(rule) {
+        this.rule = rule;
+        this.inEdges = 0;
+        this.inComplete = 0;
+        this.inFiles = [];
+        tasks.push(this);
+      }
+
+      var edges = generateBuildGraph(getAllMatchingInputs(rules), rules),
+          working = [],
+          createdCount = 0,
+          taskCount = 0;
+
+      function tasksForInput(input) {
+        var result = [];
+        for(var i = 0; i < edges.length; i++) {
+          var edge = edges[i];
+          if(edge[0] === input) {
+            result.push(edge[1]);
+          }
+        }
+
+        return result;
+      }
+
+      //Create a build graph in object form from the edge list we have
+      //currently
+      var inEdges = {};
+      edges.forEach(function(edge) {
+        if(inEdges[edge[0]] === undefined)
+          inEdges[edge[0]] = { n: 0, op: edge[1] };
+        else if(inEdges.op === undefined)
+          inEdges.op = edge[1];
+
+        if(!inEdges[edge[1].output])
+          inEdges[edge[1].output] = {n: 1};
+        else
+          inEdges[edge[1].output].n++;
       });
-    };
 
-    defineRule.requires = function(ruleset) {
-      requires = requires.concat(toArray(ruleset));
-    };
-
-    ruleset(defineRule);
-
-    return new Promise(function(mResolve, mReject) {
-      nextRequire(false);
-      function nextRequire(prevWorkDone) {
-        if(requires.length) {
-          stage(requires.shift(), true).then(function(workDone) {
-            nextRequire(prevWorkDone || workDone);
-          }, function(err) {
-            console.log(err);
-          });
-        } else {
-          work(prevWorkDone);
+      for(var node in inEdges) {
+        if(inEdges[node].n === 0) {
+          working.push(inEdges[node].op);
+          inEdges[node].op.inComplete = 1;
         }
       }
 
-      function work(workDone) {
-        var outs = [],
-            nextTask = 0;
+      digest(working);
 
-        var tasks = [];
-        function Task(rule) {
-          this.rule = rule;
-          this.inEdges = 0;
-          this.inComplete = 0;
-          this.inFiles = [];
-          tasks.push(this);
-        }
+      function digest(working) {
+        if(!working.length) return done();
 
-        var edges = generateBuildGraph(getAllMatchingInputs(rules), rules),
-            working = [],
-            createdCount = 0,
-            taskCount = 0;
+        var newWorking = [];
+        var promises = [];
+        working.forEach(function(op) {
+          //Ready to go?
+          if(op.inComplete === op.inEdges) {
+            promises.push(performOperation(op));
 
-        function tasksForInput(input) {
-          var result = [];
-          for(var i = 0; i < edges.length; i++) {
-            var edge = edges[i];
-            if(edge[0] === input) {
-              result.push(edge[1]);
-            }
+            var outs = tasksForInput(op.output);
+            outs.forEach(function(out) {
+              out.inComplete++;
+            });
+
+            newWorking = union(newWorking, outs);
+          } else {
+            //Put it back on the working list
+            newWorking.push(op);
           }
-
-          return result;
-        }
-
-        //Create a build graph in object form from the edge list we have
-        //currently
-        var inEdges = {};
-        edges.forEach(function(edge) {
-          if(inEdges[edge[0]] === undefined)
-            inEdges[edge[0]] = { n: 0, op: edge[1] };
-          else if(inEdges.op === undefined)
-            inEdges.op = edge[1];
-
-          if(!inEdges[edge[1].output])
-            inEdges[edge[1].output] = {n: 1};
-          else
-            inEdges[edge[1].output].n++;
         });
 
-        for(var node in inEdges) {
-          if(inEdges[node].n === 0) {
-            working.push(inEdges[node].op);
-            inEdges[node].op.inComplete = 1;
-          }
-        }
-
-        digest(working);
-
-        function digest(working) {
-          if(!working.length) return done();
-
-          var newWorking = [];
-          var promises = [];
-          working.forEach(function(op) {
-            //Ready to go?
-            if(op.inComplete === op.inEdges) {
-              promises.push(performOperation(op));
-
-              var outs = tasksForInput(op.output);
-              outs.forEach(function(out) {
-                out.inComplete++;
-              });
-
-              newWorking = union(newWorking, outs);
-            } else {
-              //Put it back on the working list
-              newWorking.push(op);
+        Promise.settle(promises).then(function(results) {
+          var anyRejected = false;
+          results.forEach(function(i) {
+            if(i.isRejected()) {
+              anyRejected = true;
+              console.log(i);
             }
           });
 
-          Promise.settle(promises).then(function(results) {
-            var anyRejected = false;
-            results.forEach(function(i) {
-              if(i.isRejected()) {
-                anyRejected = true;
-                console.log(i);
-              }
-            });
-
-            if(anyRejected) {
-              if(!options.quiet) {
-                console.log("An operation has failed. Aborting.");
-              }
-            } else {
-              digest(newWorking);
+          if(anyRejected) {
+            if(!options.quiet) {
+              console.log("An operation has failed. Aborting.");
             }
-          });
-        } //end of digest()
-
-        function done() {
-          if(createdCount === 0 && taskCount === 0 && !options.quiet) {
-            if(!isChild && !workDone) {
-              console.log("Nothing to be done.");
-            }
-
-            mResolve(false || workDone);
           } else {
-            if(!isChild && workDone) {
-              console.log("Success.");
-            }
-            mResolve(true);
+            digest(newWorking);
           }
-        }
+        });
+      } //end of digest()
 
-        function performOperation(op) {
-          if(options.verbose) {
-            console.log(op.inputs.join(" "), "->", op.output);
-          }
-
-          if(needsUpdate(op.inputs, [op.output])) {
-            createdCount++;
-
-            process.stdout.write("Creating ");
-            cursor.green();
-            process.stdout.write(op.output + "\n"); 
-            cursor.reset();
-
-            var out = op.fn(buildInputs(), [op.output]);
-            if(isPromise(out)) {
-              return out.then(function(buffer) {
-                if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-                  var ps = [];
-                  ps.push(writep(op.output, buffer));
-
-                  return Promise.all(ps);
-                } else {
-                  return true;
-                }
-              });
-            } else if(out instanceof Writable) {
-              return new Promise(function(resolve, reject) {
-                out.pipe(fs.createWriteStream(op.output));
-                out.on("end", function() {
-                  resolve();
-                });
-              });
-            }
+      function done() {
+        if(createdCount === 0 && taskCount === 0 && !options.quiet) {
+          if(!isChild && !anyWorkDone) {
+            console.log("Nothing to be done.");
           }
 
-          function buildInputs() {
-            var inputs = [];
-            op.inputs.forEach(function(file) {
-              inputs.push(new Input(file));
-            });
-
-            inputs.asBuffers = function() {
-              return this.map(function(i) { return i.asBuffer(); });
-            };
-
-            return inputs;
+          mResolve(false || workDone);
+        } else {
+          if(!isChild && anyWorkDone) {
+            console.log("Success.");
           }
+          mResolve(true);
         }
       }
-    });
-  }
+
+      function performOperation(op) {
+        if(options.verbose) {
+          console.log(op.inputs.join(" "), "->", op.output);
+        }
+
+        if(needsUpdate(op.inputs, [op.output])) {
+          createdCount++;
+
+          process.stdout.write("Creating ");
+          cursor.green();
+          process.stdout.write(op.output + "\n"); 
+          cursor.reset();
+
+          var out = op.fn(buildInputs(), [op.output]);
+          if(isPromise(out)) {
+            return out.then(function(buffer) {
+              if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+                var ps = [];
+                ps.push(writep(op.output, buffer));
+
+                return Promise.all(ps);
+              } else {
+                return true;
+              }
+            });
+          } else if(out instanceof Writable) {
+            return new Promise(function(resolve, reject) {
+              out.pipe(fs.createWriteStream(op.output));
+              out.on("end", function() {
+                resolve();
+              });
+            });
+          }
+        }
+
+        function buildInputs() {
+          var inputs = [];
+          op.inputs.forEach(function(file) {
+            inputs.push(new Input(file));
+          });
+
+          inputs.asBuffers = function() {
+            return this.map(function(i) { return i.asBuffer(); });
+          };
+
+          return inputs;
+        }
+      }
+    }
+  });
 }
 
 xtend(fez, fezUtil);
