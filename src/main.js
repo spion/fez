@@ -56,43 +56,13 @@ function getRuleset(options) {
 function createRuleFns(rules, requires) {
   function defineRule(inputs, output, operation) {
     if(typeof output !== "string") throw new Error("Output argument of rule() must be a string");
-
     rules.push({ inputs: toArray(inputs), output: output, op: operation });
   }
 
-  //One to one relationships where you want to pass in multiple inputs (i.e
-  //from a glob, array, or generator). Repeats the operation for each input
-  //with the output.
   defineRule.each = function(input, output, operation) {
     if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
-
-    //(ibw) will need to add a mechanism for array inputs once I sort out the
-    //semantics. See https://gist.github.com/isaacbw/8311616 for a possible
-    //use case.
     if(Array.isArray(input)) throw new Error("Input argument of rule.each() must be a string");
-
     rules.push({ input: input, output: output, op: operation, each: true });
-  };
-
-  //Pass complete input and output arrays to operation Useful for many-many
-  //operations, which should really be limited to shell commands. Native fez
-  //operations should try very hard to be one-one or many-one operations with a
-  //single output.
-  defineRule.many = function(inputs, outputs, operation) {
-    rules.push({ inputs: toArray(inputs), outputs: toArray(outputs), op: operation, many: true });
-  };
-  
-  //A task is a special rule which has no output. It will be run each time the
-  //ruleset is run, since there are no output files with which to compare
-  //timestamps.
-  defineRule.task = function(inputs, operation) {
-    rules.push({ inputs: toArray(inputs), op: operation, task: true });
-  };
-
-  defineRule.task.each = function(inputs, operation) {
-    toArray(inputs).forEach(function(input) {
-      rules.push({ inputs: [input], op: operation, task: true, each: true });
-    });
   };
 
   defineRule.requires = function(ruleset) {
