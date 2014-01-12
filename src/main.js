@@ -26,7 +26,19 @@ var nopt = require("nopt"),
  *****************/
 
 function fez(module) {
-  var options = nopt({
+  var options = getOptions(),
+      ruleset = getRuleset(options);
+  stage(module.exports[ruleset], false, options);
+}
+
+fez.async = function (module) {
+  var options = getOptions(),
+      ruleset = getRuleset(options);
+  stage(module.exports[ruleset], false, options, true);
+}
+
+function getOptions() {
+  return nopt({
     "verbose": Boolean,
     "quiet": Boolean,
     "clean": Boolean
@@ -35,9 +47,10 @@ function fez(module) {
     "q": "--quiet",
     "c": "--clean"
   });
+}
 
-  var ruleset = options.argv.remain.length ? options.argv.remain[0] : 'default';
-  stage(module.exports[ruleset], false, options);
+function getRuleset(options) {
+  return options.argv.remain.length ? options.argv.remain[0] : 'default';
 }
 
 function createRuleFns(rules, requires) {
@@ -90,14 +103,30 @@ function createRuleFns(rules, requires) {
   return defineRule;
 }
 
-function stage(ruleset, isChild, options) {
-  var rules = [], requires = [];
+function stage(ruleset, isChild, options, async) {
+  var rules = [], 
+      requires = [],
+      defineRule = createRuleFns(rules, requires);
 
-  //One to one or many to one relationships. Repeats the operation for each
-  //output if there are multiple, passing the complete input array each time.
-  var defineRule = createRuleFns(rules, requires);
-  ruleset(defineRule);
+  if(async) {
+    var finished = false;
+    var p = ruleset(defineRule, function() {
+      if(isPromise(p)) throw new Error("Can't call done() when returning a promise");
+      finished = true;
+      resolveRequires(rules, requires, isChild, options);
+    });
 
+    if(isPromise(p)) {
+      if(finished) console.log("done() has already been called");
+      p.then(resolveRequires.bind(rules, requires, isChild, options));
+    }
+
+  } else {
+    ruleset(defineRule);
+  }
+}
+
+function resolveRequires(rules, requires, isChild, options) {
   var anyWorkDone = false;
   return (function nextRequire() {
     if(requires.length) {
