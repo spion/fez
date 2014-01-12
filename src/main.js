@@ -35,7 +35,7 @@ fez.async = function (module) {
   var options = getOptions(),
       ruleset = getRuleset(options);
   stage(module.exports[ruleset], false, options, true);
-}
+};
 
 function getOptions() {
   return nopt({
@@ -118,11 +118,11 @@ function stage(ruleset, isChild, options, async) {
 
     if(isPromise(p)) {
       if(finished) console.log("done() has already been called");
-      p.then(resolveRequires.bind(rules, requires, isChild, options));
+      return p.then(resolveRequires.bind(rules, requires, isChild, options));
     }
-
   } else {
     ruleset(defineRule);
+    return resolveRequires(rules, requires, isChild, options);
   }
 }
 
