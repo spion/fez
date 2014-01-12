@@ -62,8 +62,7 @@ function createRuleFns(rules, requires) {
 
   //One to one relationships where you want to pass in multiple inputs (i.e
   //from a glob, array, or generator). Repeats the operation for each input
-  //with the output. I'M NOT SURE I LIKE THE SEMANTICS OF THIS FUNCTION. USE
-  //AT YOUR OWN RISK. -ibw
+  //with the output.
   defineRule.each = function(input, output, operation) {
     if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
 
