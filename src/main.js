@@ -212,7 +212,6 @@ function digest(nodes, working, options) {
 }
 
 function done(options, isChild, prevWorkDone, anyWorkDone) {
-  console.log(prevWorkDone, anyWorkDone);
   if(!anyWorkDone && !options.quiet) {
     if(!isChild && !prevWorkDone)
       console.log("Nothing to be done.");
@@ -293,7 +292,7 @@ function writep(file, data) {
       if(err) reject(err);
       fs.writeFile(file, data, function(err) {
         if(err) reject(err);
-        else resolve(true);
+        else resolve(tru)e;
       });
     });
   });
