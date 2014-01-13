@@ -193,7 +193,10 @@ function digest(nodes, working, options) {
     results.forEach(function(i) {
       if(i.isRejected()) {
         anyRejected = true;
+        process.stdout.write("Rejected: ");
+        cursor.red();
         console.log(i);
+        cursor.reset();
       } else {
         anyWorkDone = anyWorkDone || i.value();
       }
@@ -292,7 +295,7 @@ function writep(file, data) {
       if(err) reject(err);
       fs.writeFile(file, data, function(err) {
         if(err) reject(err);
-        else resolve(tru)e;
+        else resolve(true);
       });
     });
   });
