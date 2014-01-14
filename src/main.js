@@ -221,6 +221,7 @@ function done(options, isChild, prevWorkDone, anyWorkDone) {
 
     return false || prevWorkDone;
   } else {
+    if(!isChild && Math.random() < 0.001) console.log("We’re all stories, in the end.");
     return true;
   }
 }
