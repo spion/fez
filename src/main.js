@@ -221,7 +221,7 @@ function done(options, isChild, prevWorkDone, anyWorkDone) {
 
     return false || prevWorkDone;
   } else {
-    if(!isChild && Math.random() < 0.0001) console.log("We’re all stories, in the end.");
+    if(!isChild && Math.random() < 0.0001 && !options.quiet) console.log("We’re all stories, in the end.");
     return true;
   }
 }
