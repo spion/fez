@@ -261,6 +261,8 @@ function performOperation(options, op) {
       return writep(output, new Buffer(out));
     } else if(out instanceof Buffer) {
       return writep(output, out);
+    } else if(typeof out === "function") {
+      throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
     } else {
       throw new Error("Invalid operation output:", out);
     }
