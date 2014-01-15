@@ -255,30 +255,7 @@ function performOperation(options, op) {
       }
 
       out = op.fn(buildInputs(inputs), [output]);
-      if(isPromise(out)) {
-        return out.then(function(buffer) {
-          if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-            return writep(output, buffer);
-          } else {
-            return true;
-          }
-        });
-      } else if(out instanceof Writable) {
-        return new Promise(function(resolve, reject) {
-          out.pipe(fs.createWriteStream(op.output));
-          out.on("end", function() {
-            resolve();
-          });
-        });
-      } else if(typeof out === "string") {
-        return writep(output, new Buffer(out));
-      } else if(out instanceof Buffer) {
-        return writep(output, out);
-      } else if(typeof out === "function") {
-        throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
-      } else {
-        throw new Error("Invalid operation output:", out);
-      }
+      return processOutput(out);
     } else {
       return false;
     }
@@ -287,6 +264,33 @@ function performOperation(options, op) {
     out = op.fn(buildInputs(inputs));
     if(isPromise(out)) return out.then(function() { return true; });
     else return true;
+  }
+}
+
+function processOutput(out) {
+  if(isPromise(out)) {
+    return out.then(function(buffer) {
+      if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+        return writep(output, buffer);
+      } else {
+        return true;
+      }
+    });
+  } else if(out instanceof Writable) {
+    return new Promise(function(resolve, reject) {
+      out.pipe(fs.createWriteStream(op.output));
+      out.on("end", function() {
+        resolve();
+      });
+    });
+  } else if(typeof out === "string") {
+    return writep(output, new Buffer(out));
+  } else if(out instanceof Buffer) {
+    return writep(output, out);
+  } else if(typeof out === "function") {
+    throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
+  } else {
+    throw new Error("Invalid operation output:", out);
   }
 }
 
