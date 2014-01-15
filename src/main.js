@@ -28,6 +28,7 @@ var nopt = require("nopt"),
 function fez(module) {
   var options = getOptions(),
       ruleset = getRuleset(options);
+  process.chdir(path.dirname(module.filename));
   stage(module.exports[ruleset], false, options);
 }
 
@@ -221,7 +222,7 @@ function done(options, isChild, prevWorkDone, anyWorkDone) {
 
     return false || prevWorkDone;
   } else {
-    if(!isChild && Math.random() < 0.0001 && !options.quiet) console.log("We’re all stories, in the end.");
+    if(!isChild && Math.random() < 0.0001 && !options.quiets) console.log("We’re all stories, in the end.");
     return true;
   }
 }
