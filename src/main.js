@@ -218,7 +218,7 @@ function digest(nodes, working, options) {
       return anyWorkDone;
     } else {
       return digest(nodes, newWorking, options).then(function(workDone) {
-          return workDone || anyWorkDone;
+        return workDone || anyWorkDone;
       });
     }
   });
@@ -242,43 +242,51 @@ function performOperation(options, op) {
   }
 
   var inputs = op.inputs.map(function(i) { return i.file; }),
-      output = op.output ? op.output.file : null;
+      output = op.output ? op.output.file : null,
+      out;
 
-  if(needsUpdate(inputs, [output])) {
-    if(!options.quiet && output) {
-      process.stdout.write("Creating ");
-      cursor.green();
-      process.stdout.write(output + "\n"); 
-      cursor.reset();
-    }
+  if(output) {
+    if(needsUpdate(inputs, [output])) {
+      if(!options.quiet && output) {
+        process.stdout.write("Creating ");
+        cursor.green();
+        process.stdout.write(output + "\n"); 
+        cursor.reset();
+      }
 
-    var out = op.fn(buildInputs(inputs), [output]);
-    if(isPromise(out)) {
-      return out.then(function(buffer) {
-        if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
-          return writep(output, buffer);
-        } else {
-          return true;
-        }
-      });
-    } else if(out instanceof Writable) {
-      return new Promise(function(resolve, reject) {
-        out.pipe(fs.createWriteStream(op.output));
-        out.on("end", function() {
-          resolve();
+      out = op.fn(buildInputs(inputs), [output]);
+      if(isPromise(out)) {
+        return out.then(function(buffer) {
+          if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+            return writep(output, buffer);
+          } else {
+            return true;
+          }
         });
-      });
-    } else if(typeof out === "string") {
-      return writep(output, new Buffer(out));
-    } else if(out instanceof Buffer) {
-      return writep(output, out);
-    } else if(typeof out === "function") {
-      throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
+      } else if(out instanceof Writable) {
+        return new Promise(function(resolve, reject) {
+          out.pipe(fs.createWriteStream(op.output));
+          out.on("end", function() {
+            resolve();
+          });
+        });
+      } else if(typeof out === "string") {
+        return writep(output, new Buffer(out));
+      } else if(out instanceof Buffer) {
+        return writep(output, out);
+      } else if(typeof out === "function") {
+        throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
+      } else {
+        throw new Error("Invalid operation output:", out);
+      }
     } else {
-      throw new Error("Invalid operation output:", out);
+      return false;
     }
-  } else {
-    return false;
+  } else { //It's a task
+    //Just do it for now (add .fez file later)
+    out = op.fn(buildInputs(inputs));
+    if(isPromise(out)) return out.then(function() { return true; });
+    else return true;
   }
 }
 
