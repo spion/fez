@@ -40,16 +40,19 @@ function checkInput(input, rule, bucket, operation, glob) {
   var outputs = [];
   glob(input).forEach(function(match) {
     if(!bucket[match]) {
-      var output = outputForInput(rule, match);
-
       if(rule.each)
-        bucket[match] = new Operation(rule.op, output);
+        bucket[match] = new Operation(rule.op);
       else if (!operation)
-        bucket[match] = operation = new Operation(rule.op, output);
+        bucket[match] = operation = new Operation(rule.op);
       else
         bucket[match] = operation;
 
-      outputs.push(output);
+      if(!rule.task) {
+        var output = outputForInput(rule, match);
+        bucket[match].output = output;
+
+        outputs.push(output);
+      }
     }
   });
 
@@ -135,9 +138,8 @@ function edgeListToGraph(edges) {
 
 //A unique transformation or task. In the case of `each` rules, many operation
 //nodes may exist for a single rule definition.
-function Operation(fn, output) {
+function Operation(fn) {
   this.fn = fn;
-  this.output = output;
   this.inputs = [];
   this.inComplete = 0;
 }

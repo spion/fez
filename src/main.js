@@ -71,6 +71,14 @@ function createRuleFns(rules, requires) {
     rules.push({ input: input, output: output, op: operation, each: true });
   };
 
+  defineRule.task = function(inputs, operation) {
+    rules.push({ inputs: toArray(inputs), op: operation, task: true }); 
+  };
+
+  defineRule.task.each = function(input, operation) {
+    rules.push({ input: input, op: operation, task: true, each: true });
+  };
+
   defineRule.requires = function(ruleset) {
     requires = requires.concat(toArray(ruleset));
   };
@@ -199,10 +207,6 @@ function digest(nodes, working, options) {
     results.forEach(function(i) {
       if(i.isRejected()) {
         anyRejected = true;
-        process.stdout.write("Rejected: ");
-        cursor.red();
-        console.log(i);
-        cursor.reset();
       } else {
         anyWorkDone = anyWorkDone || i.value();
       }
@@ -238,10 +242,10 @@ function performOperation(options, op) {
   }
 
   var inputs = op.inputs.map(function(i) { return i.file; }),
-      output = op.output.file;
+      output = op.output ? op.output.file : null;
 
   if(needsUpdate(inputs, [output])) {
-    if(!options.quiet) {
+    if(!options.quiet && output) {
       process.stdout.write("Creating ");
       cursor.green();
       process.stdout.write(output + "\n"); 
