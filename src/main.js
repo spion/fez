@@ -26,16 +26,21 @@ var nopt = require("nopt"),
  *****************/
 
 function fez(module) {
-  var options = getOptions(),
-      ruleset = getRuleset(options);
-  process.chdir(path.dirname(module.filename));
-  stage(module.exports[ruleset], false, options);
+  if(require.main === module) {
+    var options = getOptions(),
+        ruleset = getRuleset(options);
+    process.chdir(path.dirname(module.filename));
+    stage(module.exports[ruleset], false, options);
+  }
 }
 
 fez.async = function (module) {
-  var options = getOptions(),
-      ruleset = getRuleset(options);
-  stage(module.exports[ruleset], false, options, true);
+  if(require.main === module) {
+    var options = getOptions(),
+        ruleset = getRuleset(options);
+    process.chdir(path.dirname(module.filename));
+    stage(module.exports[ruleset], false, options, true);
+  }
 };
 
 function getOptions() {
