@@ -134,6 +134,12 @@ function work(rules, options, isChild, prevWorkDone) {
     
     return Promise.resolve(cleaned || prevWorkDone);
   } else {
+    var taskHashes = [];
+    nodes.forEach(function(node) {
+      if(!node.isFile() && node.output === undefined)
+        taskHashes.push(hashTask(node));
+    });
+    tidyTaskList(taskHashes);
     return build(nodes, isChild, prevWorkDone, options);
   }
 };
@@ -399,34 +405,59 @@ function getNewestInput(inputs) {
 }
 
 //(ibw) make this async and return a promise
-function taskNeedsRerun(inputs, hash) {
+function taskNeedsRerun(inputs, taskHash) {
   var newestInput = getNewestInput(inputs);
 
-  try {
-    var file = fs.readFileSync(".fez", { encoding: "utf8" }),
-        lines = file.split("\n"),
-        timestamps = lines.map(function(line) { return line.split(" "); }),
-        needed = true;
-
-    timestamps.forEach(function(pair) {
-      if(pair[0] === hash) {
-        console.log(pair[1], newestInput);
-        if(parseInt(pair[1]) > newestInput) needed = false;
-      }
-    });
-
-    return needed;
-  } catch(e) { }
-
-  return true;
+  var needed = true;
+  iterateTaskList(function(hash, timestamp) {
+    if(hash === taskHash) {
+      if(parseInt(timestamp) > newestInput) needed = false;
+    }
+  });
+  
+  return needed;
 }
 
-function recordTaskTimestamp(hash) {
-  var ms = new Date().getTime();
+function recordTaskTimestamp(taskHash) {
+  var ms = new Date().getTime(),
+      entries = {};
 
-  //(ibw) should remove non-existent operation hashes at some point earlier in
-  //the process.
-  fs.appendFileSync(".fez", hash + " " + ms + "\n");
+  iterateTaskList(function(hash, timestamp) {
+    entries[hash] = timestamp;
+  });
+  
+  entries[taskHash] = ms;
+  fs.writeFileSync(".fez", entriesToString(entries));
+}
+
+function entriesToString(entries) {
+  var str = "";
+  for(var hash in entries) {
+    var timestamp = entries[hash];
+    str += hash + " " + timestamp + "\n";
+  }
+  return str;
+}
+
+function iterateTaskList(fn) {
+  try {
+    var file = fs.readFileSync(".fez", { encoding: "utf8" }),
+        lines = file.trim().split("\n"),
+        timestamps = lines.map(function(line) { return line.split(" "); });
+    timestamps.forEach(function(pair) {
+      fn(pair[0], pair[1]);
+    });
+  } catch(e) { }
+}
+
+function tidyTaskList(keep) {
+  var entries = {};
+  iterateTaskList(function(hash, timestamp) {
+    if(keep.indexOf(hash) !== -1)
+      entries[hash] = timestamp;
+  });
+
+  fs.writeFileSync(".fez", entriesToString(entries));
 }
 
 //(ibw) should switch to a real set data structure to improve performance
