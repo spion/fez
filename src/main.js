@@ -198,7 +198,7 @@ function digest(nodes, working, options) {
       if(node.inComplete === node.inputs.length) {
         //Yes, do the operation and put the output on the working list
         promises.push(performOperation(options, node));
-        newWorking.push(node.output);
+        if(node.output) newWorking.push(node.output);
       } else {
         //No, put it back on the working list
         newWorking.push(node);
@@ -265,7 +265,7 @@ function performOperation(options, op) {
       }
 
       out = op.fn(buildInputs(inputs), [output]);
-      return processOutput(out);
+      return processOutput(out, output);
     } else {
       return false;
     }
@@ -277,7 +277,7 @@ function performOperation(options, op) {
   }
 }
 
-function processOutput(out) {
+function processOutput(out, output) {
   if(isPromise(out)) {
     return out.then(function(buffer) {
       if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
