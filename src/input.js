@@ -16,7 +16,7 @@ Input.prototype.asBuffer = function() {
 };
 
 Input.prototype.asStream = function() {
-
+  return fs.createReadStream(this._filename);
 };
 
 Input.prototype.getFilename = function() {
