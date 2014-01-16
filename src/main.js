@@ -63,12 +63,16 @@ function getRuleset(options) {
 function createRuleFns(rules, requires) {
   function defineRule(inputs, output, operation) {
     if(typeof output !== "string") throw new Error("Output argument of rule() must be a string");
+    if(arguments.length > 3)
+      operation = chain(Array.prototype.slice.call(arguments, 2));
     rules.push({ inputs: toArray(inputs), output: output, op: operation });
   }
 
   defineRule.each = function(input, output, operation) {
     if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
     if(Array.isArray(input)) throw new Error("Input argument of rule.each() must be a string");
+    if(arguments.length > 3)
+      operation = chain(Array.prototype.slice.call(arguments, 2));
     rules.push({ input: input, output: output, op: operation, each: true });
   };
 
@@ -217,8 +221,8 @@ function digest(nodes, working, options) {
 
     results.forEach(function(i) {
       if(i.isRejected()) {
-        anyRejected = true;
-        anyWorkDone = true;
+        anyRejected = anyWorkDone = true;
+        if(options.verbose) console.log(i.error());
       } else {
         anyWorkDone = anyWorkDone || i.value();
       }
@@ -497,6 +501,30 @@ function hashTask(node) {
 
   sha1.update(node.fn.toString());
   return sha1.digest("base64");
+}
+
+function chain(operations) {
+  return function(inputs, output) {
+    return toPromise(operations[0](inputs, output)).then(function(out) {
+      operations.shift();
+      return itr(out, output);
+    });
+  };
+
+  function itr(out, output) {
+    if(operations.length > 0) {
+      var op = operations.shift();
+      if(typeof out === "string") out = new Buffer(out);
+      return itr(op([new Input(out)], output));
+    } else {
+      return out;
+    }
+  }
+}
+
+function toPromise(p) {
+  if(isPromise(p)) return p;
+  return Promise.resolve(p);
 }
 
 module.exports = fez;
