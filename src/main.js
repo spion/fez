@@ -1,5 +1,4 @@
 var nopt = require("nopt"),
-    crypto = require("crypto"),
     ansi = require("ansi"),
     cursor = ansi(process.stdout),
     through = require("through"),
@@ -167,10 +166,6 @@ function clean(nodes, options) {
     } catch(e) {}
   });
 
-  try {
-    fs.unlinkSync(".fez");
-  } catch(e) {}
-
   return any;
 }
 
@@ -203,7 +198,7 @@ function digest(nodes, working, options) {
       if(node.inComplete === node.inputs.length) {
         //Yes, do the operation and put the output on the working list
         promises.push(performOperation(options, node));
-        if(node.output) newWorking.push(node.output);
+        newWorking.push(node.output);
       } else {
         //No, put it back on the working list
         newWorking.push(node);
@@ -248,7 +243,6 @@ function done(options, isChild, prevWorkDone, anyWorkDone) {
   }
 }
 
-//Returns a promise fulfilled with a boolean indicating whether work was done
 function performOperation(options, op) {
   if(options.verbose) {
     if(op.output)
@@ -271,32 +265,19 @@ function performOperation(options, op) {
       }
 
       out = op.fn(buildInputs(inputs), [output]);
-      return processOutput(out, output);
+      return processOutput(out);
     } else {
-      return Promise.resolve(false);
+      return false;
     }
-  } else {
-    var hash = hashTask(op);
-    if(taskNeedsRerun(inputs, hash)) {
-      out = op.fn(buildInputs(inputs));
-      if(isPromise(out)) {
-        return out.then(function() { 
-          recordTaskTimestamp(hash); 
-          return true; 
-        }, function() {
-          throw new Error();
-        });
-      } else {
-        recordTaskTimestamp(hash); 
-        return Promise.resolve(true);
-      }
-    } else {
-      return Promise.resolve(false);
-    }
+  } else { //It's a task
+    //Just do it for now (add .fez file later)
+    out = op.fn(buildInputs(inputs));
+    if(isPromise(out)) return out.then(function() { return true; });
+    else return true;
   }
 }
 
-function processOutput(out, output) {
+function processOutput(out) {
   if(isPromise(out)) {
     return out.then(function(buffer) {
       if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
@@ -390,55 +371,7 @@ function needsUpdate(inputs, outputs) {
   return newestInput > oldestOutput;
 }
 
-function getNewestInput(inputs) {
-  var newest = 0;
-  inputs.forEach(function(input) {
-    try {
-      var stat = fs.statSync(input),
-          time = stat.mtime.getTime();
-
-      if(time > newest)
-        newest = time;
-    } catch(e) {
-      newest = 0;
-    }
-  });
-
-  return newest;
-}
-
-//(ibw) make this async and return a promise
-function taskNeedsRerun(inputs, hash) {
-  var newestInput = getNewestInput(inputs);
-
-  try {
-    var file = fs.readFileSync(".fez", { encoding: "utf8" }),
-        lines = file.split("\n"),
-        timestamps = lines.map(function(line) { return line.split(" "); }),
-        needed = true;
-
-    timestamps.forEach(function(pair) {
-      if(pair[0] === hash) {
-        console.log(pair[1], newestInput);
-        if(parseInt(pair[1]) > newestInput) needed = false;
-      }
-    });
-
-    return needed;
-  } catch(e) { }
-
-  return true;
-}
-
-function recordTaskTimestamp(hash) {
-  var ms = new Date().getTime();
-
-  //(ibw) should remove non-existent operation hashes at some point earlier in
-  //the process.
-  fs.appendFileSync(".fez", hash + " " + ms + "\n");
-}
-
-//(ibw) should switch to a real set data structure to improve performance
+//(ibw) should switch to a real set data structure for maximum performance
 function union(a, b) {
   var a2 = a.filter(function() { return true; });
   b.forEach(function(e) {
@@ -466,17 +399,6 @@ function getMatchingInputs(rule) {
   }));
 }
 
-//(ibw) Is this a complete enough hash?
-function hashTask(node) {
-  var sha1 = crypto.createHash("sha1");
-  node.inputs.forEach(function(input) {
-    sha1.update(input.file);
-  });
-
-  sha1.update(node.fn.toString());
-  return sha1.digest("base64");
-}
-
 function chain(operations) {
   return function(inputs, output) {
     return toPromise(operations[0](inputs, output)).then(function(out) {
@@ -502,3 +424,4 @@ function toPromise(p) {
 }
 
 module.exports = fez;
+
