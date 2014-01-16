@@ -1,4 +1,5 @@
 *~
+.gitmodules
 node_modules/
 tests/
 *.png
