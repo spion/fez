@@ -85,7 +85,9 @@ function createRuleFns(rules, requires) {
   };
 
   defineRule.requires = function(ruleset) {
-    requires = requires.concat(toArray(ruleset));
+    toArray(ruleset).forEach(function(r) {
+      requires.push(r);
+    });
   };
 
   return defineRule;
@@ -255,7 +257,10 @@ function done(options, isChild, prevWorkDone, anyWorkDone) {
 //Returns a promise fulfilled with a boolean indicating whether work was done
 function performOperation(options, op) {
   if(options.verbose) {
-    console.log(op.inputs.map(function(i) { return i.file; }).join(" "), "->", op.output.file);
+    if(op.output)
+      console.log(op.inputs.map(function(i) { return i.file; }).join(" "), "->", op.output.file);
+    else
+      console.log(op.inputs.map(function(i) { return i.file; }).join(" "), "-/");
   }
 
   var inputs = op.inputs.map(function(i) { return i.file; }),
