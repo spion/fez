@@ -40,12 +40,11 @@ function getOptions() {
     "verbose": Boolean,
     "quiet": Boolean,
     "clean": Boolean,
-    "graphviz": Boolean
+    "dot": Boolean
   }, {
     "v": "--verbose",
     "q": "--quiet",
-    "c": "--clean",
-    "g": "--graphviz"
+    "c": "--clean"
   });
 }
 
@@ -106,7 +105,7 @@ function stage(ruleset, isChild, options, async) {
 }
 
 function resolveRequires(rules, requires, isChild, options) {
-  if(options.graphviz)
+  if(options.dot)
     return work(rules, options, isChild, anyWorkDone);
 
   var anyWorkDone = false;
@@ -125,7 +124,7 @@ function resolveRequires(rules, requires, isChild, options) {
 function work(rules, options, isChild, prevWorkDone) {
   var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
-  if(options.graphviz) {
+  if(options.dot) {
     //console.log(nodes);
     process.stdout.write("digraph{");
     var id = 0;
