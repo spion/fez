@@ -1,3 +1,0 @@
-[submodule "tests/moment"]
-	path = tests/moment
-	url = https://github.com/moment/moment.git
