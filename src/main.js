@@ -17,14 +17,6 @@ var nopt = require("nopt"),
     fezUtil = require("./util"),
     xtend = require("xtend/mutable");
 
-/*****************
- *     --o--     *
- *    |   ) |    *
- *    |    )|    *
- *    +----)+    *
- *      FEZ      *
- *****************/
-
 function fez(module) {
   if(require.main === module) {
     var options = getOptions(),
@@ -47,11 +39,13 @@ function getOptions() {
   return nopt({
     "verbose": Boolean,
     "quiet": Boolean,
-    "clean": Boolean
+    "clean": Boolean,
+    "graphviz": Boolean
   }, {
     "v": "--verbose",
     "q": "--quiet",
-    "c": "--clean"
+    "c": "--clean",
+    "g": "--graphviz"
   });
 }
 
@@ -116,6 +110,9 @@ function stage(ruleset, isChild, options, async) {
 }
 
 function resolveRequires(rules, requires, isChild, options) {
+  if(options.graphviz)
+    return work(rules, options, isChild, anyWorkDone);
+
   var anyWorkDone = false;
   return (function nextRequire() {
     if(requires.length) {
@@ -131,6 +128,37 @@ function resolveRequires(rules, requires, isChild, options) {
 
 function work(rules, options, isChild, prevWorkDone) {
   var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
+
+  if(options.graphviz) {
+    //console.log(nodes);
+    process.stdout.write("digraph{");
+    var id = 0;
+    nodes.forEach(function(node) {
+      node._id = id++;
+      if(node.isFile()) {
+        process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
+      } else {
+        var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/;
+        var result = node.fn.toString().match(regex);
+        if(!result) {
+          process.stdout.write(node._id + " [label=\"?\"];");
+        } else {
+          process.stdout.write(node._id + " [label=\"" + result[1] + "\"];");
+        }
+      }
+    });
+
+    nodes.forEach(function(node) {
+      if(node.output)
+        process.stdout.write(node._id + "->" + node.output._id + ";");
+      else if(node.outputs)
+        node.outputs.forEach(function(output) {
+          process.stdout.write(node._id + "->" + output._id + ";");
+        });
+    });
+    process.stdout.write("}");
+    return Promise.resolve(true);
+  }
 
   if(options.clean) {
     var cleaned = clean(nodes, options);

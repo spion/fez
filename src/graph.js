@@ -60,10 +60,18 @@ function checkInput(input, rule, bucket, operation, glob) {
 }
 
 function edgesToNodeList(edges) {
+  //console.log(edges);
   var nodes = [];
 
   function addFile(name, out) {
     if(name instanceof File) {
+      for(var i = 0; i < nodes.length; i++) {
+        if(nodes[i] instanceof File && nodes[i].file === name.file) {
+          if(out) nodes[i].outputs.push(out);
+          return nodes[i];
+        }
+      }
+
       if(nodes.indexOf(file === -1)) nodes.push(name);
       if(out) name.outputs.push(out);
       return name;
@@ -83,10 +91,11 @@ function edgesToNodeList(edges) {
   }
 
   function addOperation(op) {
-    if(nodes.indexOf(op) === -1) {
-      nodes.push(op);
-    }
+    for(var i = 0; i < nodes.length; i++) {
+      if(nodes[i]._id === op._id) return op;
+    } 
 
+    nodes.push(op);
     return op;
   }
 
@@ -94,7 +103,7 @@ function edgesToNodeList(edges) {
     var input = addFile(edge[0], edge[1]);
     var op = addOperation(edge[1]);
     op.inputs.push(input);
-    if(edge[1].output) {
+    if(!(edge[1].output instanceof File)) {
       var out = addFile(edge[1].output);
       out.inputs.push(op);
       op.output = out;
@@ -131,17 +140,14 @@ function mergeBuckets(objs) {
   }, []);
 }
 
-function edgeListToGraph(edges) {
-  console.log(edges);
-  return {};
-}
-
 //A unique transformation or task. In the case of `each` rules, many operation
 //nodes may exist for a single rule definition.
+var opId = 0;
 function Operation(fn) {
   this.fn = fn;
   this.inputs = [];
   this.inComplete = 0;
+  this._id = opId++;
 }
 
 Operation.prototype.isFile = function() {
