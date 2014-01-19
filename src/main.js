@@ -72,7 +72,7 @@ function createRuleFns(rules, requires) {
     rules.push({ inputs: toArray(inputs), op: operation, task: true }); 
   };
 
-  defineRule.requires = function(ruleset) {
+  defineRule.use = function(ruleset) {
     toArray(ruleset).forEach(function(r) {
       requires.push(r);
     });
