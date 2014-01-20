@@ -5,8 +5,8 @@ var path = require("path"),
 var fez = module.exports = {};
 
 fez.exec = function(command) {
-  return function(inputs, outputs) {
-    var ifiles = inputs.map(function(i) { return i.getFilename(); }).join(" "),
+  function ex(inputs, outputs) {
+    var ifiles = toArray(inputs).map(function(i) { return i.getFilename(); }).join(" "),
         ofiles = outputs.join(" "),
         pcommand = command.
           replace("%i", ifiles).
@@ -19,6 +19,9 @@ fez.exec = function(command) {
       });
     });
   };
+
+  ex.value = command;
+  return ex;
 };
 
 fez.mapFile = function(pattern) {
@@ -47,11 +50,17 @@ fez.mapFile = function(pattern) {
 
 fez.patsubst = function(pattern, replacement, string) {
   if(Array.isArray(string))
-    return string.map(fez.patsubst.bind(pattern, replacement));
+    return string.map(fez.patsubst.bind(null, pattern, replacement));
 
-  var regex = new RegExp(pattern.replace("%", ".+")),
+  var regex = new RegExp(pattern.replace(".", "\\.").replace("%", "(.+)")),
       result = regex.exec(string),
-      sub = result[1];
+      sub = result[1],
+      out = replacement.replace("%", sub);
 
-  return replacement.replace("%", sub);
+  return out;
 };
+
+function toArray(obj) {
+  if(Array.isArray(obj)) return obj;
+  return [obj];
+}

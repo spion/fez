@@ -123,12 +123,20 @@ function work(rules, options, isChild, prevWorkDone) {
       if(node.isFile()) {
         process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
       } else {
-        var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/;
-        var result = node.fn.toString().match(regex);
-        if(!result) {
+        var name = null;
+
+        if(node.fn.value) {
+          name = node.fn.value;
+        } else {
+          var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/,
+              result = node.fn.toString().match(regex);
+          name = result[1];
+        } 
+
+        if(!name) {
           process.stdout.write(node._id + " [label=\"?\"];");
         } else {
-          process.stdout.write(node._id + " [label=\"" + result[1] + "\"];");
+          process.stdout.write(node._id + " [label=\"" + name + "\"];");
         }
       }
     });

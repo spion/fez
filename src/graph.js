@@ -15,8 +15,8 @@ function generateBuildGraph(inputs, rules) {
     }
 
     rules.forEach(function(rule, i) {
-      if(rule.each) newOutputs = newOutputs.concat(checkInput(rule.input, rule, buckets[i], operations[i], glob));
-      else newOutputs = newOutputs.concat(checkInputs(rule.inputs, rule, buckets[i], operations[i], glob));
+      if(rule.each) newOutputs = newOutputs.concat(checkInput(rule.input, rule, buckets[i], operations, i, glob));
+      else newOutputs = newOutputs.concat(checkInputs(rule.inputs, rule, buckets[i], operations, i, glob));
     });
     
     if(newOutputs.length > 0) return itr(buckets, operations, newOutputs);
@@ -26,26 +26,26 @@ function generateBuildGraph(inputs, rules) {
   return edgesToNodeList(mergeBuckets(itr(genObjectArray(rules.length), [], cloneArray(inputs))));
 }
 
-function checkInputs(inputs, rule, bucket, operation, glob) {
+function checkInputs(inputs, rule, bucket, operations, i, glob) {
   var outputs = [];
 
   inputs.forEach(function(input) {
-    outputs = outputs.concat(checkInput(input, rule, bucket, operation, glob));
+    outputs = outputs.concat(checkInput(input, rule, bucket, operations, i, glob));
   });
 
   return outputs;
 }
 
-function checkInput(input, rule, bucket, operation, glob) {
+function checkInput(input, rule, bucket, operations, i, glob) {
   var outputs = [];
   glob(input).forEach(function(match) {
     if(!bucket[match]) {
       if(rule.each)
-        bucket[match] = new Operation(rule.op);
-      else if (!operation)
-        bucket[match] = operation = new Operation(rule.op);
-      else
-        bucket[match] = operation;
+        bucket[match] = new Operation(rule.op); 
+      else if (!operations[i]) {
+        bucket[match] = operations[i] = new Operation(rule.op);
+      } else
+        bucket[match] = operations[i];
 
       if(!rule.task) {
         var output = outputForInput(rule, match);
@@ -60,7 +60,6 @@ function checkInput(input, rule, bucket, operation, glob) {
 }
 
 function edgesToNodeList(edges) {
-  //console.log(edges);
   var nodes = [];
 
   function addFile(name, out) {
