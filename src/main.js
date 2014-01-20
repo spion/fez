@@ -15,7 +15,8 @@ var nopt = require("nopt"),
     Input = require("./input"),
     generateBuildGraph = require("./graph"),
     fezUtil = require("./util"),
-    xtend = require("xtend/mutable");
+    xtend = require("xtend/mutable"),
+    clone = require("clone");
 
 function fez(module) {
   if(require.main === module) {
@@ -112,55 +113,57 @@ function resolveRequires(rules, requires, done, isChild, options) {
 }
 
 function work(rules, options, isChild, prevWorkDone) {
-  var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
+  return Promise.all(rules.map(resolveRuleInputs)).then(function(rules) {
+    var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
-  if(options.verbose)
-    console.log(nodes);
+    if(options.verbose)
+      console.log(nodes);
 
-  if(options.dot) {
-    //console.log(nodes);
-    process.stdout.write("digraph{");
-    var id = 0;
-    nodes.forEach(function(node) {
-      node._id = id++;
-      if(node.isFile()) {
-        process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
-      } else {
-        var name = null;
-
-        if(node.fn.value) {
-          name = node.fn.value;
+    if(options.dot) {
+      //console.log(nodes);
+      process.stdout.write("digraph{");
+      var id = 0;
+      nodes.forEach(function(node) {
+        node._id = id++;
+        if(node.isFile()) {
+          process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
         } else {
-          var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/,
-              result = node.fn.toString().match(regex);
-          if(result)
-            name = result[1];
-          else name = "?";
-        } 
+          var name = null;
 
-        process.stdout.write(node._id + " [label=\"" + name + "\"];");
-      }
-    });
+          if(node.fn.value) {
+            name = node.fn.value;
+          } else {
+            var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/,
+                result = node.fn.toString().match(regex);
+            if(result)
+              name = result[1];
+            else name = "?";
+          } 
 
-    nodes.forEach(function(node) {
-      if(node.output)
-        process.stdout.write(node._id + "->" + node.output._id + ";");
-      else if(node.outputs)
-        node.outputs.forEach(function(output) {
-          process.stdout.write(node._id + "->" + output._id + ";");
-        });
-    });
-    process.stdout.write("}");
-    return Promise.resolve(true);
-  } else if(options.clean) {
-    var cleaned = clean(nodes, options);
-    if(!cleaned && !isChild && !options.quiet && !prevWorkDone)
-      console.log("Nothing to clean.");
-    
-    return Promise.resolve(cleaned || prevWorkDone);
-  } else {
-    return build(nodes, isChild, prevWorkDone, options);
-  }
+          process.stdout.write(node._id + " [label=\"" + name + "\"];");
+        }
+      });
+
+      nodes.forEach(function(node) {
+        if(node.output)
+          process.stdout.write(node._id + "->" + node.output._id + ";");
+        else if(node.outputs)
+          node.outputs.forEach(function(output) {
+            process.stdout.write(node._id + "->" + output._id + ";");
+          });
+      });
+      process.stdout.write("}");
+      return Promise.resolve(true);
+    } else if(options.clean) {
+      var cleaned = clean(nodes, options);
+      if(!cleaned && !isChild && !options.quiet && !prevWorkDone)
+        console.log("Nothing to clean.");
+      
+      return Promise.resolve(cleaned || prevWorkDone);
+    } else {
+      return build(nodes, isChild, prevWorkDone, options);
+    }
+  });
 };
 
 function clean(nodes, options) {
@@ -400,19 +403,22 @@ function union(a, b) {
   return a2;
 }
 
-function merge(arrays) {
+function flatten(arrays) {
+  if(!Array.isArray(arrays)) return [arrays];
+
   return arrays.reduce(function(prev, array) {
-    return prev.concat(array);
+    if(Array.isArray(array)) return prev.concat(flatten(array));
+    else return prev.concat(flatten(array));
   }, []);
 }
 
 function getAllMatchingInputs(rules) {
-  return merge(rules.map(getMatchingInputs));
+  return flatten(rules.map(getMatchingInputs));
 }
 
 function getMatchingInputs(rule) {
   if(rule.each) return glob.sync(rule.input);
-  return merge(rule.inputs.map(function(globstring) {
+  return flatten(rule.inputs.map(function(globstring) {
     return glob.sync(globstring);
   }));
 }
@@ -439,6 +445,22 @@ function chain(operations) {
 function toPromise(p) {
   if(isPromise(p)) return p;
   return Promise.resolve(p);
+}
+
+function resolveRuleInputs(rule) {
+  var newRule = {};
+  for(var prop in rule) {
+    newRule[prop] = rule[prop];
+  }
+
+  return Promise.all(newRule.inputs).then(function(inputs) {
+    newRule.inputs = flatten(inputs);
+    return newRule;
+  });
+}
+
+function resolveRuleInput(input) {
+  return input;
 }
 
 module.exports = fez;
