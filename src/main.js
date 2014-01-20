@@ -114,7 +114,7 @@ function resolveRequires(rules, requires, done, isChild, options) {
         return nextRequire();
       });
     } else {
-      if(imperative) return done;
+      if(done) return done;
       else return work(rules, options, isChild, anyWorkDone);
     }
   })();
@@ -235,8 +235,7 @@ function digest(nodes, working, options) {
     results.forEach(function(i) {
       if(i.isRejected()) {
         anyRejected = anyWorkDone = true;
-        if(options.verbose)
-          console.log("Rejected:", i.error());
+        if(options.verbose) console.log("Rejected:", i.error());
       } else {
         anyWorkDone = anyWorkDone || i.value();
       }
