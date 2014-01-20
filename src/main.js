@@ -76,7 +76,7 @@ function stage(ruleset, isChild, options) {
   var rules = [], 
       requires = [],
       defineRule = createRuleFns(rules, requires),
-      done = null;;
+      done = null;
 
   defineRule.imp = function() {
     if(rules.length > 0) throw new Error("Cannot define rules in imperative mode");
@@ -114,6 +114,9 @@ function resolveRequires(rules, requires, done, isChild, options) {
 function work(rules, options, isChild, prevWorkDone) {
   var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
+  if(options.verbose)
+    console.log(nodes);
+
   if(options.dot) {
     //console.log(nodes);
     process.stdout.write("digraph{");
@@ -130,14 +133,12 @@ function work(rules, options, isChild, prevWorkDone) {
         } else {
           var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/,
               result = node.fn.toString().match(regex);
-          name = result[1];
+          if(result)
+            name = result[1];
+          else name = "?";
         } 
 
-        if(!name) {
-          process.stdout.write(node._id + " [label=\"?\"];");
-        } else {
-          process.stdout.write(node._id + " [label=\"" + name + "\"];");
-        }
+        process.stdout.write(node._id + " [label=\"" + name + "\"];");
       }
     });
 
@@ -151,11 +152,9 @@ function work(rules, options, isChild, prevWorkDone) {
     });
     process.stdout.write("}");
     return Promise.resolve(true);
-  }
-
-  if(options.clean) {
+  } else if(options.clean) {
     var cleaned = clean(nodes, options);
-    if(!cleaned && !isChild && !options.quiet)
+    if(!cleaned && !isChild && !options.quiet && !prevWorkDone)
       console.log("Nothing to clean.");
     
     return Promise.resolve(cleaned || prevWorkDone);
@@ -191,15 +190,13 @@ function clean(nodes, options) {
 }
 
 function build(nodes, isChild, prevWorkDone, options) {
-  return new Promise(function(resolve, reject) {
-    var working = [];
+  var working = [];
 
-    nodes.forEach(function(node) {
-      if(node.isFile() && node.inputs.length === 0) working.push(node);
-    });
-
-    return digest(nodes, working, options).then(done.bind(this, options, isChild, prevWorkDone));
+  nodes.forEach(function(node) {
+    if(node.isFile() && node.inputs.length === 0) working.push(node);
   });
+
+  return digest(nodes, working, options).then(done.bind(this, options, isChild, prevWorkDone));
 }
 
 function digest(nodes, working, options) {
