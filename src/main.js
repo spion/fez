@@ -40,13 +40,11 @@ function getOptions() {
     "verbose": Boolean,
     "quiet": Boolean,
     "clean": Boolean,
-    "dot": Boolean,
-    "no-output": Boolean
+    "dot": Boolean
   }, {
     "v": "--verbose",
     "q": "--quiet",
-    "c": "--clean",
-    "n": "--no-output"
+    "c": "--clean"
   });
 }
 
@@ -289,8 +287,7 @@ function performOperation(options, op) {
       }
 
       out = op.fn(buildInputs(inputs), [output]);
-      if(!options["no-output"]) return processOutput(out, output);
-      else return Promise.resolve(true);
+      return processOutput(out, output);
     } else {
       return false;
     }
