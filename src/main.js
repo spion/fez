@@ -453,7 +453,7 @@ function resolveRuleInputs(rule) {
     newRule[prop] = rule[prop];
   }
 
-  return Promise.all(newRule.inputs).then(function(inputs) {
+  return Promise.all(toArray(newRule.inputs)).then(function(inputs) {
     newRule.inputs = flatten(inputs);
     return newRule;
   });
