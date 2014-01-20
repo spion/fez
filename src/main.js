@@ -84,27 +84,27 @@ function createRuleFns(rules, requires) {
 function stage(ruleset, isChild, options, async) {
   var rules = [], 
       requires = [],
-      defineRule = createRuleFns(rules, requires);
+      defineRule = createRuleFns(rules, requires),
+      imperative = false,
+      done;
 
-  if(async) {
-    var finished = false;
-    var p = ruleset(defineRule, function() {
-      if(isPromise(p)) throw new Error("Can't call done() when returning a promise");
-      finished = true;
-      resolveRequires(rules, requires, isChild, options);
-    });
+  defineRule.imp = function() {
+    if(rules.length > 0) throw new Error("Cannot define rules in imperative mode");
+    imperative = true;
+    done = new Promise.resolver();
+    return function() {
+      done.resolve();
+    };
+  };
 
-    if(isPromise(p)) {
-      if(finished) console.log("done() has already been called");
-      return p.then(resolveRequires.bind(rules, requires, isChild, options));
-    }
-  } else {
-    ruleset(defineRule);
-    return resolveRequires(rules, requires, isChild, options);
-  }
+  var result = ruleset(defineRule);
+  if(imperative && isPromise(result)) 
+    done = result;
+
+  return resolveRequires(rules, requires, imperative, done, isChild, options);
 }
 
-function resolveRequires(rules, requires, isChild, options) {
+function resolveRequires(rules, requires, imperative, done, isChild, options) {
   if(options.dot)
     return work(rules, options, isChild, anyWorkDone);
 
@@ -116,7 +116,8 @@ function resolveRequires(rules, requires, isChild, options) {
         return nextRequire();
       });
     } else {
-      return work(rules, options, isChild, anyWorkDone);
+      if(imperative) return done;
+      else return work(rules, options, isChild, anyWorkDone);
     }
   })();
 }
