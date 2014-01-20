@@ -44,3 +44,14 @@ fez.mapFile = function(pattern) {
     return pattern.replace("%f", f);
   };
 };
+
+fez.patsubst = function(pattern, replacement, string) {
+  if(Array.isArray(string))
+    return string.map(fez.patsubst.bind(pattern, replacement));
+
+  var regex = new RegExp(pattern.replace("%", ".+")),
+      result = regex.exec(string),
+      sub = result[1];
+
+  return replacement.replace("%", sub);
+};
