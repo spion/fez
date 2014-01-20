@@ -85,12 +85,10 @@ function stage(ruleset, isChild, options, async) {
   var rules = [], 
       requires = [],
       defineRule = createRuleFns(rules, requires),
-      imperative = false,
-      done;
+      done = null;;
 
   defineRule.imp = function() {
     if(rules.length > 0) throw new Error("Cannot define rules in imperative mode");
-    imperative = true;
     done = new Promise.resolver();
     return function() {
       done.resolve();
@@ -98,13 +96,13 @@ function stage(ruleset, isChild, options, async) {
   };
 
   var result = ruleset(defineRule);
-  if(imperative && isPromise(result)) 
+  if(done && isPromise(result)) 
     done = result;
 
-  return resolveRequires(rules, requires, imperative, done, isChild, options);
+  return resolveRequires(rules, requires, done, isChild, options);
 }
 
-function resolveRequires(rules, requires, imperative, done, isChild, options) {
+function resolveRequires(rules, requires, done, isChild, options) {
   if(options.dot)
     return work(rules, options, isChild, anyWorkDone);
 
@@ -237,9 +235,7 @@ function digest(nodes, working, options) {
     results.forEach(function(i) {
       if(i.isRejected()) {
         anyRejected = anyWorkDone = true;
-        if(options.verbose && i.error() instanceof Error) 
-          console.log("Rejected:", i.error().toString());
-        else if(options.verbose)
+        if(options.verbose)
           console.log("Rejected:", i.error());
       } else {
         anyWorkDone = anyWorkDone || i.value();
