@@ -26,15 +26,6 @@ function fez(module) {
   }
 }
 
-fez.async = function (module) {
-  if(require.main === module) {
-    var options = getOptions(),
-        ruleset = getRuleset(options);
-    process.chdir(path.dirname(module.filename));
-    stage(module.exports[ruleset], false, options, true);
-  }
-};
-
 function getOptions() {
   return nopt({
     "verbose": Boolean,
@@ -81,7 +72,7 @@ function createRuleFns(rules, requires) {
   return defineRule;
 }
 
-function stage(ruleset, isChild, options, async) {
+function stage(ruleset, isChild, options) {
   var rules = [], 
       requires = [],
       defineRule = createRuleFns(rules, requires),
