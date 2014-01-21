@@ -81,10 +81,9 @@ function stage(ruleset, isChild, options) {
 
   defineRule.imp = function() {
     if(rules.length > 0) throw new Error("Cannot define rules in imperative mode");
-    done = new Promise.resolver();
-    return function() {
-      done.resolve();
-    };
+    var resolver = Promise.defer();
+    done = resolver.promise;
+    return resolver.callback;
   };
 
   var result = ruleset(defineRule);
