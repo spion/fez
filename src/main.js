@@ -46,7 +46,11 @@ function getRuleset(options) {
 
 function createRuleFns(rules, requires) {
   function defineRule(inputs, output, operation) {
-    if(typeof output !== "string") throw new Error("Output argument of rule() must be a string");
+    if(typeof output === "function") {
+      operation = output;
+      output = undefined;
+    }
+
     if(arguments.length > 3)
       operation = chain(Array.prototype.slice.call(arguments, 2));
     rules.push({ inputs: toArray(inputs), output: output, op: operation });
@@ -58,10 +62,6 @@ function createRuleFns(rules, requires) {
     if(arguments.length > 3)
       operation = chain(Array.prototype.slice.call(arguments, 2));
     rules.push({ input: input, output: output, op: operation, each: true });
-  };
-
-  defineRule.task = function(inputs, operation) {
-    rules.push({ inputs: toArray(inputs), op: operation, task: true }); 
   };
 
   defineRule.use = function(ruleset) {

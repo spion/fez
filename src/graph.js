@@ -47,7 +47,7 @@ function checkInput(input, rule, bucket, operations, i, glob) {
       } else
         bucket[match] = operations[i];
 
-      if(!rule.task) {
+      if(rule.output) {
         var output = outputForInput(rule, match);
         bucket[match].output = output;
 
