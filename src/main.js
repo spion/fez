@@ -300,10 +300,12 @@ function performOperation(options, op) {
 function processOutput(out, output) {
   if(isPromise(out)) {
     return out.then(function(buffer) {
-      if(buffer !== undefined) { //(ibw) assume it's a Buffer (for now)
+      if(buffer instanceof Buffer) {
         return writep(output, buffer);
+      } else if(!buffer) {
+        return writep(output, new Buffer(0));
       } else {
-        return true;
+        throw new Error("Invalid operation output:", out);
       }
     });
   } else if(out instanceof Writable) {
@@ -319,6 +321,8 @@ function processOutput(out, output) {
     return writep(output, out);
   } else if(typeof out === "function") {
     throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
+  } else if(!out) {
+    return writep(output, new Buffer(0));
   } else {
     throw new Error("Invalid operation output:", out);
   }
