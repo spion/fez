@@ -304,9 +304,11 @@ function processOutput(out, output) {
         return writep(output, buffer);
       } else if(!buffer) {
         return writep(output, new Buffer(0));
-      } else {
+      } else if(buffer !== true) {
         throw new Error("Invalid operation output:", out);
       }
+
+      return true;
     });
   } else if(out instanceof Writable) {
     return new Promise(function(resolve, reject) {
@@ -323,9 +325,11 @@ function processOutput(out, output) {
     throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
   } else if(!out) {
     return writep(output, new Buffer(0));
-  } else {
+  } else if(out !== true) {
     throw new Error("Invalid operation output:", out);
   }
+
+  return true;
 }
 
 function buildInputs(files) {

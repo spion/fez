@@ -15,7 +15,7 @@ fez.exec = function(command) {
     return new Promise(function(resolve, reject) {
       exec(pcommand, function(err) {
         if(err) reject(err);
-        else resolve();
+        else resolve(true);
       });
     });
   };
