@@ -2,7 +2,7 @@ var fez = require("../../src/main"),
     jshint = require("fez-jshint");
 
 exports.lint = function(rule) {
-  rule.task.each("src/*.js", jshint({
+  rule.each("src/*.js", fez.mapFile(".fez.jshint.%f"), jshint({
     curly: true,
     indent: 2
   }));
