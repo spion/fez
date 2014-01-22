@@ -44,7 +44,7 @@ fez.mapFile = function(pattern) {
       }
     })();
 
-    return pattern.replace("%f", f);
+    return pattern.replace("%f", f).replace("%F", path.basename(input));
   };
 };
 
@@ -64,3 +64,22 @@ function toArray(obj) {
   if(Array.isArray(obj)) return obj;
   return [obj];
 }
+
+fez.chain = function(operations) {
+  return function(inputs, output) {
+    return toPromise(operations[0](inputs, output)).then(function(out) {
+      operations.shift();
+      return itr(out, output);
+    });
+  };
+
+  function itr(out, output) {
+    if(operations.length > 0) {
+      var op = operations.shift();
+      if(typeof out === "string") out = new Buffer(out);
+      return itr(op([new Input(out)], output));
+    } else {
+      return out;
+    }
+  }
+};

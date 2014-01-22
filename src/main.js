@@ -46,21 +46,20 @@ function getRuleset(options) {
 
 function createRuleFns(rules, requires) {
   function defineRule(inputs, output, operation) {
-    if(typeof output === "function") {
+    if(arguments.length === 2) {
       operation = output;
       output = undefined;
     }
 
-    if(arguments.length > 3)
-      operation = chain(Array.prototype.slice.call(arguments, 2));
     rules.push({ inputs: toArray(inputs), output: output, op: operation });
   }
 
   defineRule.each = function(input, output, operation) {
-    if(typeof output !== "function") throw new Error("Output argument of rule.each() must be a function");
-    if(Array.isArray(input)) throw new Error("Input argument of rule.each() must be a string");
-    if(arguments.length > 3)
-      operation = chain(Array.prototype.slice.call(arguments, 2));
+    if(arguments.length === 2) {
+      operation = output;
+      output = undefined;
+    }
+
     rules.push({ input: input, output: output, op: operation, each: true });
   };
 
@@ -277,30 +276,29 @@ function performOperation(options, op) {
 
   if(output) {
     if(needsUpdate(inputs, [output])) {
-      if(!options.quiet && output) {
-        process.stdout.write("Creating ");
-        cursor.green();
-        process.stdout.write(output + "\n"); 
-        cursor.reset();
-      }
-
       out = op.fn(buildInputs(inputs), [output]);
-      return processOutput(out, output);
+      return processOutput(out, output, inputs, options);
     } else {
       return false;
     }
   } else { //It's a task
-    //Just do it for now (add .fez file later)
     out = op.fn(buildInputs(inputs));
     if(isPromise(out)) return out.then(function() { return true; });
     else return true;
   }
 }
 
-function processOutput(out, output) {
+function processOutput(out, output, inputs, options) {
   if(isPromise(out)) {
     return out.then(function(buffer) {
       if(buffer instanceof Buffer) {
+        if(!options.quiet && output) {
+          process.stdout.write("Creating ");
+          cursor.green();
+          process.stdout.write(output + "\n"); 
+          cursor.reset();
+        }
+
         return writep(output, buffer);
       } else if(!buffer) {
         return writep(output, new Buffer(0));
@@ -428,25 +426,6 @@ function getMatchingInputs(rule) {
   return flatten(rule.inputs.map(function(globstring) {
     return glob.sync(globstring);
   }));
-}
-
-function chain(operations) {
-  return function(inputs, output) {
-    return toPromise(operations[0](inputs, output)).then(function(out) {
-      operations.shift();
-      return itr(out, output);
-    });
-  };
-
-  function itr(out, output) {
-    if(operations.length > 0) {
-      var op = operations.shift();
-      if(typeof out === "string") out = new Buffer(out);
-      return itr(op([new Input(out)], output));
-    } else {
-      return out;
-    }
-  }
 }
 
 function toPromise(p) {
