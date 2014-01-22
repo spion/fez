@@ -23,10 +23,10 @@ var nopt = require("nopt"),
 function fez(module) {
   if(require.main === module) {
     var options = xtend({ output: true }, getOptions()),
-        ruleset = getRuleset(options);
+        target = getTarget(options);
     process.chdir(path.dirname(module.filename));
     options.module = module;
-    target(module.exports[ruleset], false, options);
+    processTarget(module.exports[target], false, options);
   }
 }
 
@@ -45,7 +45,7 @@ function getOptions() {
   });
 }
 
-function getRuleset(options) {
+function getTarget(options) {
   return options.argv.remain.length ? options.argv.remain[0] : 'default';
 }
 
@@ -83,11 +83,21 @@ function createRuleFns(rules, requires) {
   return defineRule;
 }
 
-function target(ruleset, isChild, options) {
+function processTarget(target, isChild, options) {
   var requires = [],
       stages = [];
 
-  ruleset(stages.push.bind(stages));
+  var stage = function(cb) {
+    stages.push(cb);
+  };
+
+  stage.use = function(target) {
+    toArray(target).forEach(function(r) {
+      requires.push(r);
+    });
+  };
+
+  target(stage);
 
   return resolveRequires(stages, requires, isChild, options);
 }
@@ -99,7 +109,7 @@ function resolveRequires(stages, requires, isChild, options) {
   var anyWorkDone = false;
   return (function nextRequire() {
     if(requires.length > 0) {
-      return target(requires.shift(), true, options).then(function(workDone) {
+      return processTarget(requires.shift(), true, options).then(function(workDone) {
         anyWorkDone = anyWorkDone || workDone;
         return nextRequire();
       });
