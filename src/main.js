@@ -1,6 +1,7 @@
 var nopt = require("nopt"),
     ansi = require("ansi"),
     cursor = ansi(process.stdout),
+    crypto = require("crypto"),
     through = require("through"),
     glob = require("glob"),
     path = require("path"),
@@ -45,22 +46,28 @@ function getRuleset(options) {
 }
 
 function createRuleFns(rules, requires) {
-  function defineRule(inputs, output, operation) {
-    if(arguments.length === 2) {
+  function defineRule(inputs, output, operation, options) {
+    if((arguments.length === 2) || (arguments.length === 3 && typeof operation === "object")) {
+      if(typeof operation === "object") options = operation;
       operation = output;
       output = undefined;
     }
 
-    rules.push({ inputs: toArray(inputs), output: output, op: operation });
+    options = options || {};
+
+    rules.push({ inputs: toArray(inputs), output: output, op: operation, always: options.always });
   }
 
-  defineRule.each = function(input, output, operation) {
-    if(arguments.length === 2) {
+  defineRule.each = function(input, output, operation, options) {
+    if((arguments.length === 2) || (arguments.length === 3 && typeof operation === "object")) {
+      if(typeof operation === "object") options = operation;
       operation = output;
       output = undefined;
     }
 
-    rules.push({ input: input, output: output, op: operation, each: true });
+    options = options || {};
+
+    rules.push({ input: input, output: output, op: operation, each: true, always: options.always });
   };
 
   defineRule.use = function(ruleset) {
@@ -126,17 +133,10 @@ function work(rules, options, isChild, prevWorkDone) {
         if(node.isFile()) {
           process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
         } else {
-          var name = null;
+          var name = node.fn.name;
 
-          if(node.fn.value) {
-            name = node.fn.value;
-          } else {
-            var regex = /^function ([A-Za-z$_][A-Za-z$_0-9]*)\(.*\)/,
-                result = node.fn.toString().match(regex);
-            if(result)
-              name = result[1];
-            else name = "?";
-          } 
+          if(name === "")
+            name = "?";
 
           process.stdout.write(node._id + " [label=\"" + name + "\"];");
         }
@@ -165,9 +165,10 @@ function work(rules, options, isChild, prevWorkDone) {
 };
 
 function clean(nodes, options) {
-  var files = [],
+  var files = glob.sync(".fez.*"),
       complete = 0,
       any = false;
+
 
   nodes.forEach(function(node) {
     if(node.isFile() && node.inputs.length > 0) files.push(node.file);
@@ -283,6 +284,7 @@ function performOperation(options, op) {
     }
   } else { //It's a task
     out = op.fn(buildInputs(inputs));
+
     if(isPromise(out)) return out.then(function() { return true; });
     else return true;
   }
@@ -351,6 +353,7 @@ function toArray(obj) {
 }
 
 function writep(file, data) {
+  if(!data) data = new Buffer(0);
   return new Promise(function(resolve, reject) {
     mkdirp(path.dirname(file), function(err) {
       if(err) reject(err);
@@ -435,6 +438,8 @@ function toPromise(p) {
 
 function resolveRuleInputs(rule) {
   var newRule = {};
+
+  //Shallow clone
   for(var prop in rule) {
     newRule[prop] = rule[prop];
   }

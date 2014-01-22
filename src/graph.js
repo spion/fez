@@ -1,5 +1,6 @@
 var xtend = require("xtend"),
-    minimatch = require("minimatch");
+    minimatch = require("minimatch"),
+    crypto = require("crypto");
 
 function generateBuildGraph(inputs, rules) {
   function itr(buckets, operations, outputs) {
@@ -102,10 +103,25 @@ function edgesToNodeList(edges) {
     var input = addFile(edge[0], edge[1]);
     var op = addOperation(edge[1]);
     op.inputs.push(input);
-    if(!(edge[1].output instanceof File)) {
+    if(edge[1].output && !(edge[1].output instanceof File)) {
       var out = addFile(edge[1].output);
       out.inputs.push(op);
       op.output = out;
+    }
+  });
+
+  nodes.forEach(function(node) {
+    if(!node.isFile() && !node.output && !node.always) {
+      var hash = crypto.createHash("sha256");
+      node.inputs.map(function(i) { return i.file; }).forEach(function(i) {
+        hash.update(i);
+      });
+
+      var filename = ".fez." + (node.fn.name === "" ? "" : node.fn.name + ".") + hash.digest("base64").replace("+", "").replace("/", "").substr(0, 6),
+          file = addFile(filename);
+
+      file.inputs.push(node);
+      node.output = file;
     }
   });
 
