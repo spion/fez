@@ -34,11 +34,13 @@ function getOptions() {
     "verbose": Boolean,
     "quiet": Boolean,
     "clean": Boolean,
-    "dot": Boolean
+    "dot": Boolean,
+    "no-output": Boolean
   }, {
     "v": "--verbose",
     "q": "--quiet",
-    "c": "--clean"
+    "c": "--clean",
+    "n": "--no-output"
   });
 }
 
