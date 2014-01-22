@@ -16,12 +16,13 @@ var nopt = require("nopt"),
     Input = require("./input"),
     generateBuildGraph = require("./graph"),
     fezUtil = require("./util"),
-    xtend = require("xtend/mutable"),
+    xtend = require("xtend"),
+    mxtend = require("xtend/mutable"),
     clone = require("clone");
 
 function fez(module) {
   if(require.main === module) {
-    var options = getOptions(),
+    var options = xtend({ output: true }, getOptions()),
         ruleset = getRuleset(options);
     process.chdir(path.dirname(module.filename));
     options.module = module;
@@ -280,8 +281,13 @@ function performOperation(options, op) {
 
   if(output) {
     if(needsUpdate(inputs, [output], options)) {
-      out = op.fn(buildInputs(inputs), [output]);
-      return processOutput(out, output, inputs, options);
+      if(options.output) {
+        out = op.fn(buildInputs(inputs), [output]);
+        return processOutput(out, output, inputs, options);
+      } else {
+        printCreating(output);
+        return true;
+      }
     } else {
       return false;
     }
@@ -295,35 +301,24 @@ function performOperation(options, op) {
 
 function processOutput(out, output, inputs, options) {
   if(isPromise(out)) {
-    return out.then(function(buffer) {
-      if(buffer instanceof Buffer || typeof buffer === "string") {
-        if(!options.quiet && output) {
-          process.stdout.write("Creating ");
-          cursor.green();
-          process.stdout.write(output + "\n"); 
-          cursor.reset();
-        }
-
-        return writep(output, buffer);
-      } else if(!buffer) {
-        return writep(output, new Buffer(0));
-      } else if(buffer !== true) {
-        throw new Error("Invalid operation output:", out);
-      }
-
-      return true;
+    return out.then(function(out) {
+      return processOutput(out, output, inputs, options);
     });
   } else if(out instanceof Writable) {
     return new Promise(function(resolve, reject) {
-      out.pipe(fs.createWriteStream(op.output));
+      out.pipe(fs.createWriteStream(output));
       out.on("end", function() {
         resolve();
       });
     });
-  } else if(typeof out === "string") {
-    return writep(output, new Buffer(out));
-  } else if(out instanceof Buffer) {
+  } else if(out instanceof Buffer || typeof out === "string") {
+    if(!options.quiet) 
+      printCreating(output);
     return writep(output, out);
+  } else if(!out) {
+    return writep(output, new Buffer(0));
+  } else if(out !== true) {
+    throw new Error("Invalid operation output:", out);
   } else if(typeof out === "function") {
     throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
   } else if(!out) {
@@ -333,6 +328,13 @@ function processOutput(out, output, inputs, options) {
   }
 
   return true;
+}
+
+function printCreating(output) {
+  process.stdout.write("Creating ");
+  cursor.green();
+  process.stdout.write(output + "\n"); 
+  cursor.reset();
 }
 
 function buildInputs(files) {
@@ -348,7 +350,7 @@ function buildInputs(files) {
   return inputs;
 }
 
-xtend(fez, fezUtil);
+mxtend(fez, fezUtil);
 
 function toArray(obj) {
   if(Array.isArray(obj)) return obj;
