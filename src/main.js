@@ -49,7 +49,7 @@ function getTarget(options) {
   return options.argv.remain.length ? options.argv.remain[0] : 'default';
 }
 
-function createRuleFns(rules, requires) {
+function createRuleFns(rules) {
   function defineRule(inputs, output, operation, options) {
     if((arguments.length === 2) || (arguments.length === 3 && typeof operation === "object")) {
       if(typeof operation === "object") options = operation;
@@ -72,12 +72,6 @@ function createRuleFns(rules, requires) {
     options = options || {};
 
     rules.push({ input: input, output: output, op: operation, each: true, always: options.always });
-  };
-
-  defineRule.use = function(ruleset) {
-    toArray(ruleset).forEach(function(r) {
-      requires.push(r);
-    });
   };
 
   return defineRule;
