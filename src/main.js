@@ -252,14 +252,24 @@ function digest(nodes, working, options) {
 }
 
 function done(options, isChild, prevWorkDone, anyWorkDone) {
-  if(!anyWorkDone && !options.quiet) {
-    if(!isChild && !prevWorkDone)
-      console.log("Nothing to be done.");
-
-    return false || prevWorkDone;
+  if(!isChild) {
+    var stat = fs.statSync("fez.js"),
+        fjstime = stat.mtime.getTime();
+    return writep(".fez/timestamp", fjstime.toString()).then(rest);
   } else {
-    if(!isChild && Math.random() < 0.0001 && !options.quiet) console.log("We’re all stories, in the end.");
-    return true;
+    return rest();
+  }
+
+  function rest() {
+    if(!anyWorkDone && !options.quiet) {
+      if(!isChild && !prevWorkDone)
+        console.log("Nothing to be done.");
+
+      return false || prevWorkDone;
+    } else {
+      if(!isChild && Math.random() < 0.0001 && !options.quiet) console.log("We’re all stories, in the end.");
+      return true;
+    }
   }
 }
 
@@ -293,7 +303,7 @@ function performOperation(options, op) {
 function processOutput(out, output, inputs, options) {
   if(isPromise(out)) {
     return out.then(function(buffer) {
-      if(buffer instanceof Buffer) {
+      if(buffer instanceof Buffer || typeof buffer === "string") {
         if(!options.quiet && output) {
           process.stdout.write("Creating ");
           cursor.green();
@@ -366,6 +376,14 @@ function writep(file, data) {
 }
 
 function needsUpdate(inputs, outputs) {
+  try {
+    //(ibw) should NOT be doing this every time, SLOOOOOW
+    var timestamp = parseInt(fs.readFileSync(".fez/timestamp")),
+        stat = fs.statSync("fez.js"),
+        time = stat.mtime.getTime();
+    if(time > timestamp) return true;
+  } catch(e) { }
+  
   var oldestOutput = Number.MAX_VALUE;
   outputs.forEach(function(out) {
     var dir = path.dirname(out);
@@ -396,8 +414,8 @@ function needsUpdate(inputs, outputs) {
       newestInput = 0;
     }
   });
-
-  return newestInput > oldestOutput;
+  
+  return (newestInput > oldestOutput);
 }
 
 //(ibw) should switch to a real set data structure for maximum performance

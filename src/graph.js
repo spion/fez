@@ -117,7 +117,7 @@ function edgesToNodeList(edges) {
         hash.update(i);
       });
 
-      var filename = ".fez." + (node.fn.name === "" ? "" : node.fn.name + ".") + hash.digest("base64").replace("+", "").replace("/", "").substr(0, 6),
+      var filename = ".fez/" + (node.fn.name === "" ? "" : node.fn.name + ".") + hash.digest("base64").replace("+", "").replace("/", "").substr(0, 6) + "~",
           file = addFile(filename);
 
       file.inputs.push(node);
