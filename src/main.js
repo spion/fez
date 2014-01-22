@@ -253,24 +253,14 @@ function digest(nodes, working, options) {
 }
 
 function done(options, isChild, prevWorkDone, anyWorkDone) {
-  if(!isChild) {
-    var stat = fs.statSync(options.module.filename),
-        fjstime = stat.mtime.getTime();
-    return writep(".fez/timestamp", fjstime.toString()).then(rest);
+  if(!anyWorkDone && !options.quiet) {
+    if(!isChild && !prevWorkDone)
+      console.log("Nothing to be done.");
+
+    return false || prevWorkDone;
   } else {
-    return rest();
-  }
-
-  function rest() {
-    if(!anyWorkDone && !options.quiet) {
-      if(!isChild && !prevWorkDone)
-        console.log("Nothing to be done.");
-
-      return false || prevWorkDone;
-    } else {
-      if(!isChild && Math.random() < 0.0001 && !options.quiet) console.log("We’re all stories, in the end.");
-      return true;
-    }
+    if(!isChild && Math.random() < 0.0001 && !options.quiet) console.log("We’re all stories, in the end.");
+    return true;
   }
 }
 
@@ -377,13 +367,8 @@ function writep(file, data) {
 }
 
 function needsUpdate(inputs, outputs, options) {
-  try {
-    //(ibw) should NOT be doing this every time, SLOOOOOW
-    var timestamp = parseInt(fs.readFileSync(".fez/timestamp")),
-        stat = fs.statSync(options.module.filename),
-        time = stat.mtime.getTime();
-    if(time > timestamp) return true;
-  } catch(e) { }
+  var stat = fs.statSync(options.module.filename),
+      mtime = stat.mtime.getTime();
   
   var oldestOutput = Number.MAX_VALUE;
   outputs.forEach(function(out) {
@@ -416,7 +401,7 @@ function needsUpdate(inputs, outputs, options) {
     }
   });
   
-  return (newestInput > oldestOutput);
+  return (mtime > oldestOutput) || (newestInput > oldestOutput);
 }
 
 //(ibw) should switch to a real set data structure for maximum performance
