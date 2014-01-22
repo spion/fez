@@ -42,9 +42,9 @@ function checkInput(input, rule, bucket, operations, i, glob) {
   glob(input).forEach(function(match) {
     if(!bucket[match]) {
       if(rule.each)
-        bucket[match] = new Operation(rule.op); 
+        bucket[match] = new Operation(rule.op, rule.always); 
       else if (!operations[i]) {
-        bucket[match] = operations[i] = new Operation(rule.op);
+        bucket[match] = operations[i] = new Operation(rule.op, rule.always);
       } else
         bucket[match] = operations[i];
 
@@ -158,10 +158,11 @@ function mergeBuckets(objs) {
 //A unique transformation or task. In the case of `each` rules, many operation
 //nodes may exist for a single rule definition.
 var opId = 0;
-function Operation(fn) {
+function Operation(fn, always) {
   this.fn = fn;
   this.inputs = [];
   this.inComplete = 0;
+  this.always = always;
   this._id = opId++;
 }
 

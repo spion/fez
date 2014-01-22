@@ -5,7 +5,7 @@ exports.lint = function(rule) {
   rule.each("src/*.js", jshint({
     curly: true,
     indent: 2
-  }));
+  }), { always: true });
 };
 
 exports.default = exports.lint;
