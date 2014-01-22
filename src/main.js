@@ -24,6 +24,7 @@ function fez(module) {
     var options = getOptions(),
         ruleset = getRuleset(options);
     process.chdir(path.dirname(module.filename));
+    options.module = module;
     stage(module.exports[ruleset], false, options);
   }
 }
@@ -253,7 +254,7 @@ function digest(nodes, working, options) {
 
 function done(options, isChild, prevWorkDone, anyWorkDone) {
   if(!isChild) {
-    var stat = fs.statSync("fez.js"),
+    var stat = fs.statSync(options.module.filename),
         fjstime = stat.mtime.getTime();
     return writep(".fez/timestamp", fjstime.toString()).then(rest);
   } else {
@@ -286,7 +287,7 @@ function performOperation(options, op) {
       out;
 
   if(output) {
-    if(needsUpdate(inputs, [output])) {
+    if(needsUpdate(inputs, [output], options)) {
       out = op.fn(buildInputs(inputs), [output]);
       return processOutput(out, output, inputs, options);
     } else {
@@ -375,11 +376,11 @@ function writep(file, data) {
   });
 }
 
-function needsUpdate(inputs, outputs) {
+function needsUpdate(inputs, outputs, options) {
   try {
     //(ibw) should NOT be doing this every time, SLOOOOOW
     var timestamp = parseInt(fs.readFileSync(".fez/timestamp")),
-        stat = fs.statSync("fez.js"),
+        stat = fs.statSync(options.module.filename),
         time = stat.mtime.getTime();
     if(time > timestamp) return true;
   } catch(e) { }
