@@ -202,10 +202,10 @@ function build(nodes, isChild, prevWorkDone, options) {
     if(node.isFile() && node.inputs.length === 0) working.push(node);
   });
 
-  return digest(nodes, working, options).then(done.bind(this, options, isChild, prevWorkDone));
+  return digest(nodes, working, {}, options).then(done.bind(this, options, isChild, prevWorkDone));
 }
 
-function digest(nodes, working, options) {
+function digest(nodes, working, changelist, options) {
   if(working.length === 0) return Promise.resolve(false);
 
   var newWorking = [];
@@ -221,7 +221,7 @@ function digest(nodes, working, options) {
       //Is it ready to go?
       if(node.inComplete === node.inputs.length) {
         //Yes, do the operation and put the output on the working list
-        promises.push(performOperation(options, node));
+        promises.push(performOperation(options, changelist, node));
         if(node.output) newWorking.push(node.output);
       } else {
         //No, put it back on the working list
@@ -248,7 +248,7 @@ function digest(nodes, working, options) {
         console.log("An operation has failed. Aborting.");
       return anyWorkDone;
     } else {
-      return digest(nodes, newWorking, options).then(function(workDone) {
+      return digest(nodes, newWorking, changelist, options).then(function(workDone) {
         return workDone || anyWorkDone;
       });
     }
@@ -267,7 +267,7 @@ function done(options, isChild, prevWorkDone, anyWorkDone) {
   }
 }
 
-function performOperation(options, op) {
+function performOperation(options, changelist, op) {
   if(options.verbose) {
     if(op.output)
       console.log(op.inputs.map(function(i) { return i.file; }).join(" "), "->", op.output.file);
@@ -280,11 +280,12 @@ function performOperation(options, op) {
       out;
 
   if(output) {
-    if(needsUpdate(inputs, [output], options)) {
+    if(needsUpdate(inputs, [output], changelist, options)) {
       if(options.output) {
         out = op.fn(buildInputs(inputs), [output]);
         return processOutput(out, output, inputs, options);
       } else {
+        changelist[output] = true;
         printCreating(output);
         return true;
       }
@@ -370,9 +371,13 @@ function writep(file, data) {
   });
 }
 
-function needsUpdate(inputs, outputs, options) {
+function needsUpdate(inputs, outputs, changelist, options) {
   var stat = fs.statSync(options.module.filename),
       mtime = stat.mtime.getTime();
+
+  for(var i in inputs)
+    if(changelist[inputs[i]])
+      return true;
   
   var oldestOutput = Number.MAX_VALUE;
   outputs.forEach(function(out) {
