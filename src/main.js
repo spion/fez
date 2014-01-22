@@ -26,7 +26,7 @@ function fez(module) {
         ruleset = getRuleset(options);
     process.chdir(path.dirname(module.filename));
     options.module = module;
-    stage(module.exports[ruleset], false, options);
+    target(module.exports[ruleset], false, options);
   }
 }
 
@@ -83,10 +83,37 @@ function createRuleFns(rules, requires) {
   return defineRule;
 }
 
-function stage(ruleset, isChild, options) {
+function target(ruleset, isChild, options) {
+  var requires = [],
+      stages = [];
+
+  ruleset(stages.push.bind(stages));
+
+  return resolveRequires(stages, requires, isChild, options);
+}
+
+function resolveRequires(stages, requires, isChild, options) {
+  if(options.dot)
+    return work(stages, options, isChild, anyWorkDone);
+
+  var anyWorkDone = false;
+  return (function nextRequire() {
+    if(requires.length > 0) {
+      return target(requires.shift(), true, options).then(function(workDone) {
+        anyWorkDone = anyWorkDone || workDone;
+        return nextRequire();
+      });
+    } else {
+      return work(stages, options, isChild, anyWorkDone);
+    }
+  })();
+}
+
+function work(stages, options, isChild, prevWorkDone) {
+  if(stages.length === 0) return false;
+
   var rules = [], 
-      requires = [],
-      defineRule = createRuleFns(rules, requires),
+      defineRule = createRuleFns(rules),
       done = null;
 
   defineRule.script = function() {
@@ -96,32 +123,11 @@ function stage(ruleset, isChild, options) {
     return resolver.callback;
   };
 
-  var result = ruleset(defineRule);
+  var result = stages[0](defineRule);
+
   if(done && isPromise(result)) 
     done = result;
 
-  return resolveRequires(rules, requires, done, isChild, options);
-}
-
-function resolveRequires(rules, requires, done, isChild, options) {
-  if(options.dot)
-    return work(rules, options, isChild, anyWorkDone);
-
-  var anyWorkDone = false;
-  return (function nextRequire() {
-    if(requires.length) {
-      return stage(requires.shift(), true, options).then(function(workDone) {
-        anyWorkDone = anyWorkDone || workDone;
-        return nextRequire();
-      });
-    } else {
-      if(done) return done;
-      else return work(rules, options, isChild, anyWorkDone);
-    }
-  })();
-}
-
-function work(rules, options, isChild, prevWorkDone) {
   return Promise.all(rules.map(resolveRuleInputs)).then(function(rules) {
     var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
@@ -165,6 +171,8 @@ function work(rules, options, isChild, prevWorkDone) {
     } else {
       return build(nodes, isChild, prevWorkDone, options);
     }
+  }).then(function(workDone) {
+    return work(stages.slice(1), options, isChild, workDone, options);
   });
 };
 
@@ -306,6 +314,9 @@ function processOutput(out, output, inputs, options) {
       return processOutput(out, output, inputs, options);
     });
   } else if(out instanceof Writable) {
+    if(!options.quiet) 
+      printCreating(output);
+
     return new Promise(function(resolve, reject) {
       out.pipe(fs.createWriteStream(output));
       out.on("end", function() {
@@ -318,14 +329,13 @@ function processOutput(out, output, inputs, options) {
     return writep(output, out);
   } else if(!out) {
     return writep(output, new Buffer(0));
-  } else if(out !== true) {
-    throw new Error("Invalid operation output:", out);
+  } else if(out === true) {
+    if(!options.quiet) 
+      printCreating(output);
   } else if(typeof out === "function") {
     throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
-  } else if(!out) {
-    return writep(output, new Buffer(0));
-  } else if(out !== true) {
-    throw new Error("Invalid operation output:", out);
+  } else {
+      throw new Error("Invalid operation output:", out);
   }
 
   return true;
