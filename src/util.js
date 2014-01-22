@@ -83,3 +83,8 @@ fez.chain = function(operations) {
     }
   }
 };
+
+function toPromise(p) {
+  if(isPromise(p)) return p;
+  return Promise.resolve(p);
+}
