@@ -1,6 +1,6 @@
 var nopt = require("nopt"),
     ansi = require("ansi"),
-    cursor = ansi(process.stdout),
+    cursor = ansi(process.stdout),i
     crypto = require("crypto"),
     through = require("through"),
     glob = require("glob"),
@@ -357,7 +357,7 @@ function processOutput(out, output, inputs, options) {
   } else if(typeof out === "function") {
     throw new Error("Output can't be a function. Did you forget to call the operation in your rule (e.g op())?");
   } else {
-      throw new Error("Invalid operation output:", out);
+    throw new Error("Invalid operation output (" + Object.getPrototypeOf(out).constructor.name + '):' + out);
   }
 
   return true;
