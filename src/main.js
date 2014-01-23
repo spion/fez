@@ -1,6 +1,6 @@
 var nopt = require("nopt"),
     ansi = require("ansi"),
-    cursor = ansi(process.stdout),i
+    cursor = ansi(process.stdout),
     crypto = require("crypto"),
     through = require("through"),
     glob = require("glob"),
