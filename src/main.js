@@ -17,8 +17,7 @@ var nopt = require("nopt"),
     generateBuildGraph = require("./graph"),
     fezUtil = require("./util"),
     xtend = require("xtend"),
-    mxtend = require("xtend/mutable"),
-    clone = require("clone");
+    mxtend = require("xtend/mutable");
 
 function fez(module) {
   if(require.main === module) {
