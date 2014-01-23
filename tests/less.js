@@ -25,7 +25,7 @@ test('less project', function(t) {
   }
 
   function teardown() {
-    exec("rm -r tests/less/dist.min.css tests/less/dist tests/less/css/main.css tests/less/css/mobile.css", function(err) {
+    exec("cd tests/less/; node fez.js -c", function(err) {
       if(err) t.fail(err.message);
       else t.end();
     });

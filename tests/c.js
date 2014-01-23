@@ -24,7 +24,7 @@ test('c project', function(t) {
   }
 
   function teardown() {
-    exec("rm tests/c/hello tests/c/*.o", function(err) {
+    exec("cd tests/c/; node fez.js -c", function(err) {
       if(err) t.fail(err.message);
       else t.end();
     });
