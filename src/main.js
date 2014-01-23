@@ -82,7 +82,13 @@ function processTarget(target, isChild, options) {
   var requires = [],
       stages = [];
 
-  var stage = function(cb) {
+  var stage = function(description, cb) {
+    if(arguments.length === 1) {
+      cb = description;
+      description = undefined;
+    }
+
+    cb.description = description;
     stages.push(cb);
   };
 
@@ -109,7 +115,9 @@ function resolveRequires(stages, requires, isChild, options) {
         return nextRequire();
       });
     } else {
-      return work(stages, options, isChild, anyWorkDone);
+      return work(stages, options, isChild, anyWorkDone).then(function(workDone) {
+        return work(stages, options, isChild, workDone, options);
+      });
     }
   })();
 }
@@ -128,57 +136,66 @@ function work(stages, options, isChild, prevWorkDone) {
     return resolver.callback;
   };
 
-  var result = stages[0](defineRule);
+  var stage = stages.shift(),
+      lastStage = (stages.length === 0);
+
+  /*
+  cursor.green();
+  if(stage.description)
+    console.log("Mounting stage: \"" + stage.description + "\"...");
+  else
+    console.log("Mounting next stage...");
+  cursor.reset();
+   */
+   
+  var result = stage(defineRule);
 
   if(done && isPromise(result)) 
     done = result;
 
-  return Promise.all(rules.map(resolveRuleInputs)).then(function(rules) {
-    var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
+  //return Promise.all(rules.map(resolveRuleInputs)).then(function(rules) {
+  var nodes = generateBuildGraph(getAllMatchingInputs(rules), rules);
 
-    if(options.verbose)
-      console.log(nodes);
+  if(options.verbose)
+    console.log(nodes);
 
-    if(options.dot) {
-      //console.log(nodes);
-      process.stdout.write("digraph{");
-      var id = 0;
-      nodes.forEach(function(node) {
-        node._id = id++;
-        if(node.isFile()) {
-          process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
-        } else {
-          var name = node.fn.name;
+  if(options.dot) {
+    process.stdout.write("digraph{");
+    var id = 0;
+    nodes.forEach(function(node) {
+      node._id = id++;
+      if(node.isFile()) {
+        process.stdout.write(node._id + " [shape=box,label=\"" + node.file + "\"];");
+      } else {
+        var name = node.fn.name;
 
-          if(name === "")
-            name = "?";
+        if(name === "")
+          name = "?";
 
-          process.stdout.write(node._id + " [label=\"" + name + "\"];");
-        }
-      });
+        process.stdout.write(node._id + " [label=\"" + name + "\"];");
+      }
+    });
 
-      nodes.forEach(function(node) {
-        if(node.output)
-          process.stdout.write(node._id + "->" + node.output._id + ";");
-        else if(node.outputs)
-          node.outputs.forEach(function(output) {
-            process.stdout.write(node._id + "->" + output._id + ";");
-          });
-      });
-      process.stdout.write("}");
-      return Promise.resolve(true);
-    } else if(options.clean) {
-      var cleaned = clean(nodes, options);
-      if(!cleaned && !isChild && !options.quiet && !prevWorkDone)
-        console.log("Nothing to clean.");
-      
-      return Promise.resolve(cleaned || prevWorkDone);
-    } else {
-      return build(nodes, isChild, prevWorkDone, options);
-    }
-  }).then(function(workDone) {
-    return work(stages.slice(1), options, isChild, workDone, options);
-  });
+    nodes.forEach(function(node) {
+      if(node.output)
+        process.stdout.write(node._id + "->" + node.output._id + ";");
+      else if(node.outputs)
+        node.outputs.forEach(function(output) {
+          process.stdout.write(node._id + "->" + output._id + ";");
+        });
+    });
+    process.stdout.write("}");
+    return Promise.resolve(true);
+  } else if(options.clean) {
+    var cleaned = clean(nodes, options);
+    if(!cleaned && !isChild && !options.quiet && !prevWorkDone && lastStage)
+      console.log("Nothing to clean.");
+    
+    return Promise.resolve(cleaned || prevWorkDone);
+  } else {
+    return build(nodes, isChild, prevWorkDone, stages.length === 0, options);
+  }
+  //});
 };
 
 function clean(nodes, options) {
@@ -208,14 +225,14 @@ function clean(nodes, options) {
   return any;
 }
 
-function build(nodes, isChild, prevWorkDone, options) {
+function build(nodes, isChild, prevWorkDone, lastStage, options) {
   var working = [];
 
   nodes.forEach(function(node) {
     if(node.isFile() && node.inputs.length === 0) working.push(node);
   });
 
-  return digest(nodes, working, {}, options).then(done.bind(this, options, isChild, prevWorkDone));
+  return digest(nodes, working, {}, options).then(done.bind(this, options, isChild, prevWorkDone, lastStage));
 }
 
 function digest(nodes, working, changelist, options) {
@@ -268,9 +285,9 @@ function digest(nodes, working, changelist, options) {
   });
 }
 
-function done(options, isChild, prevWorkDone, anyWorkDone) {
+function done(options, isChild, prevWorkDone, lastStage, anyWorkDone) {
   if(!anyWorkDone && !options.quiet) {
-    if(!isChild && !prevWorkDone)
+    if(!isChild && !prevWorkDone && lastStage)
       console.log("Nothing to be done.");
 
     return false || prevWorkDone;
