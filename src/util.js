@@ -61,11 +61,6 @@ fez.patsubst = function(pattern, replacement, string) {
   return out;
 };
 
-function toArray(obj) {
-  if(Array.isArray(obj)) return obj;
-  return [obj];
-}
-
 fez.chain = function(operations) {
   return function(inputs, output) {
     return toPromise(operations[0](inputs, output)).then(function(out) {
@@ -96,7 +91,7 @@ fez.glob = function(pattern) {
 
 function PatternMatch(fn) {
   fn.filterOut = function(pattern) {
-    var fn = this.fn;
+    var fn = this;
     return PatternMatch(function(files) {
       fn(files).filter(function(f) {
         return !minimatch(f, pattern);
@@ -104,10 +99,21 @@ function PatternMatch(fn) {
     });
   };
 
+  fn.with = function(files) {
+    var fn = this;
+    return PatternMatch(function(files) {
+      return fn(files).concat(toArray(files));
+    });
+  };
   return fn;
 }
 
 function toPromise(p) {
   if(isPromise(p)) return p;
   return Promise.resolve(p);
+}
+
+function toArray(obj) {
+  if(Array.isArray(obj)) return obj;
+  return [obj];
 }
