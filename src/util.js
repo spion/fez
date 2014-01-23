@@ -1,6 +1,7 @@
 var path = require("path"),
     Promise = require("bluebird"),
-    exec = require("child_process").exec;
+    exec = require("child_process").exec,
+    minimatch = require("minimatch");
 
 var fez = module.exports = {};
 
@@ -83,6 +84,28 @@ fez.chain = function(operations) {
     }
   }
 };
+
+fez.glob = function(pattern) {
+  return PatternMatch(function(files) {
+    //(ibw) We can do better than this. Fork isaacs' glob and make it work with a virtual file system
+    return files.filter(function(f) {
+      return minimatch(f, pattern);
+    });
+  });
+};
+
+function PatternMatch(fn) {
+  fn.filterOut = function(pattern) {
+    var fn = this.fn;
+    return PatternMatch(function(files) {
+      fn(files).filter(function(f) {
+        return !minimatch(f, pattern);
+      });
+    });
+  };
+
+  return fn;
+}
 
 function toPromise(p) {
   if(isPromise(p)) return p;

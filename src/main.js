@@ -70,7 +70,9 @@ function createRuleFns(rules) {
 
     options = options || {};
 
-    rules.push({ input: input, output: output, op: operation, each: true, always: options.always });
+    if(Array.isArray(input)) throw new Error("Input must be a string or function");
+
+    rules.push({ inputs: [input], output: output, op: operation, each: true, always: options.always });
   };
 
   return defineRule;
@@ -451,9 +453,17 @@ function getAllMatchingInputs(rules) {
 }
 
 function getMatchingInputs(rule) {
-  if(rule.each) return glob.sync(rule.input);
-  return flatten(rule.inputs.map(function(globstring) {
-    return glob.sync(globstring);
+  //(ibw) so bad
+  if(rule.each) {
+    if(typeof rule.inputs[0] === "function") 
+      return rule.inputs[0](glob.sync("**"));
+    return glob.sync(rule.inputs[0]);
+  }
+
+  return flatten(rule.inputs.map(function(input) {
+    if(typeof input === "function") 
+      return input(glob.sync("**"));
+    return glob.sync(input);
   }));
 }
 

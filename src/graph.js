@@ -7,6 +7,9 @@ function generateBuildGraph(inputs, rules) {
     var newOutputs = []; //new outputs
 
     function glob(pattern) {
+      if(typeof pattern === "function")
+        return pattern(outputs);
+
       var matches = [];
       outputs.forEach(function(out) {
         if(minimatch(out, pattern))
@@ -16,7 +19,7 @@ function generateBuildGraph(inputs, rules) {
     }
 
     rules.forEach(function(rule, i) {
-      if(rule.each) newOutputs = newOutputs.concat(checkInput(rule.input, rule, buckets[i], operations, i, glob));
+      if(rule.each) newOutputs = newOutputs.concat(checkInput(rule.inputs[0], rule, buckets[i], operations, i, glob));
       else newOutputs = newOutputs.concat(checkInputs(rule.inputs, rule, buckets[i], operations, i, glob));
     });
     
